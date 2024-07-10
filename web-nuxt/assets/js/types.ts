@@ -23,10 +23,11 @@ interface RandomKeyValue {
 }
 
 interface FirestoreUserProfile{
-  createdOn: Timestamp | string, 
+  createdOn: Timestamp, 
   name: string, 
   sesaid: string,
   phoneno: number,
+  admin: boolean,
 };
 
 interface MessageDetails {

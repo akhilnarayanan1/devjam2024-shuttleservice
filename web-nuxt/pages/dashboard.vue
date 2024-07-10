@@ -53,8 +53,8 @@
         return;
       };
   
-      const { createdOn, name, sesaid, phoneno } = querySnapshot.data() as FirestoreUserProfile;
-      setProfile({ createdOn, name, sesaid, phoneno });
+      const profile = querySnapshot.data() as FirestoreUserProfile
+      setProfile(profile);
   
     };
   

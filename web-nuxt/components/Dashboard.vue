@@ -14,6 +14,7 @@
                 <span class="text-base-100">{{ profile.sesaid }}</span>
             </div>
         </div>
+        {{ profile }}
 
     </div>
 </template>

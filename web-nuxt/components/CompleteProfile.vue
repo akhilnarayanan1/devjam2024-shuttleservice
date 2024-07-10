@@ -116,6 +116,7 @@
                 sesaid: form.update_sesaid,
                 phoneno: form.update_phoneno,
                 createdOn: serverTimestamp(),
+                admin: false,
             });
             completeProfileModal.open = false;
             emit('loadProfile');
