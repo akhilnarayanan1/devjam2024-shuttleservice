@@ -1,3 +1,12 @@
+import { type Timestamp } from "firebase-admin/firestore";
+
+interface AlertData{
+  message: string,
+  type: 'error' | 'success'| 'warning',
+  source: 'ui' | 'server'
+  fieldid: string,
+};
+
 interface ToastData{
   id?: number,
   message: string,
@@ -9,6 +18,30 @@ interface ToastData{
   duration?: number,
 };
 
+interface RandomKeyValue { 
+  [key: string]: string;
+}
+
+interface FirestoreUserProfile{
+  createdOn: Timestamp | string, 
+  name: string, 
+  sesaid: string,
+  phoneno: number,
+};
+
+interface MessageDetails {
+  message: string,
+  from: string,
+  to: string,
+  createdOn: Timestamp,
+  fakename: string,
+  fakeimage: string,
+};
+
 export type {
+  AlertData,
   ToastData,
+  RandomKeyValue,
+  FirestoreUserProfile,
+  MessageDetails,
 };
