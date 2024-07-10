@@ -11,7 +11,11 @@
     "deploy-hosting": "nuxt generate && firebase deploy --only hosting"
   },
   "dependencies": {
+    "@nuxtjs/tailwindcss": "^6.12.0",
     "nuxt": "^3.12.3",
     "vue": "latest"
+  },
+  "devDependencies": {
+    "daisyui": "^4.12.10"
   }
 }
