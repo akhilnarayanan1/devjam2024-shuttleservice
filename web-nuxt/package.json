@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@nuxtjs/tailwindcss": "^6.12.0",
+    "lodash": "^4.17.21",
     "nuxt": "^3.12.3",
     "vue": "latest"
   },
   "devDependencies": {
+    "@types/lodash": "^4.17.6",
     "daisyui": "^4.12.10"
   }
 }
