@@ -39,10 +39,17 @@ interface MessageDetails {
   fakeimage: string,
 };
 
+interface WhatsAppCTAMessage {
+  messaging_product: string,
+  contacts: { input: string, wa_id: string }[],
+  messages: { id: string }[],
+};
+
 export type {
   AlertData,
   ToastData,
   RandomKeyValue,
   FirestoreUserProfile,
   MessageDetails,
+  WhatsAppCTAMessage,
 };

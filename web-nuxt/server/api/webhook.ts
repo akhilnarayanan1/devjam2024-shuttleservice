@@ -4,6 +4,8 @@ export default defineEventHandler((event) => {
     const token = query["hub.verify_token"];
     const challenge = query["hub.challenge"];
 
+    console.log(JSON.stringify(event, null, 2));
+
     const { WEBHOOK_VERIFY_TOKEN } = useRuntimeConfig(event);
 
     // check the mode and token sent are correct
