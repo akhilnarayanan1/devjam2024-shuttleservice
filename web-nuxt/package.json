@@ -3,12 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "nuxt build rootDir=web-nuxt",
+    "build": "nuxt build",
+    "build:firebase": "npm run build -- --preset=firebase",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "deploy-hosting": "nuxt generate && firebase deploy --only hosting"
+    "deploy-hosting": "nuxt build"
   },
   "dependencies": {
     "@firebase/app-types": "^0.9.2",

@@ -18,8 +18,12 @@
       "port": 9099
     }
   },
+  "functions": { "source": "web-nuxt/.output/server" },
   "hosting": {
+    "site": "shuttleservice-test",
     "public": "web-nuxt/.output/public",
+    "cleanUrls": true,
+    "rewrites": [{ "source": "**", "function": "server" }],
     "ignore": [
       "firebase.json",
       "**/.*",
