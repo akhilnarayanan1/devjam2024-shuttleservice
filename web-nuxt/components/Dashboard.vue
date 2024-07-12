@@ -58,6 +58,7 @@
 
     const profile = getProfile();
     const db = useFirestore();
+    const { GRAPH_API_TOKEN } = useRuntimeConfig()
 
     interface Location {
         id: string;
@@ -90,19 +91,20 @@
             return;
         }
 
-        const { data: waResponse, status, error } = await useFetch<WhatsAppCTAMessage>(`/api/sendMessagetoDriver`, {
-            query: {
+        const { data: waResponse, status, error } = await useFetch<WhatsAppCTAMessage>(`/api/send-message-to-driver`, {
+            method: "POST",
+            body: {
                 origin: Object.keys(from.value.place)[0],
                 origin_place_id: Object.values(from.value.place)[0],
                 destination: Object.keys(to.value.place)[0],
                 destination_place_id: Object.values(to.value.place)[0],
-                travelmode: "driving"
-            }
+                travelmode: "driving",
+            },
         });
 
-        if (status.value != "success") {
+        if (error.value) {
             addToast({
-                message: JSON.stringify(error.value),
+                message: JSON.stringify(error.value?.message),
                 type: "error",
             } as ToastData)
             return;
