@@ -18,8 +18,8 @@
                 <div tabindex="0" role="button" class="btn btn-ghost">
                     <span class="material-symbols-outlined">more_vert</span>
                 </div>
-                <ul v-if="!profile.sesaid" tabindex="0" class="menu dropdown-content p-2 shadow bg-base-100 rounded-box w-52 mt-4">
-                    <div v-for="_ in Array.from({length: 5})">
+                <ul v-if="!profile.name" tabindex="0" class="menu dropdown-content p-2 shadow bg-base-100 rounded-box w-52 mt-4">
+                    <div v-for="_ in Array.from({length: 3})">
                         <li><a class="skeleton h-3 w-14 my-2"></a></li> 
                     </div>
                 </ul>

@@ -18,16 +18,6 @@
                 <div class="form-control">
                     <div class="relative input-group border rounded-lg">
                         <div class="absolute mt-3 flex items-center ps-3.5">
-                            <span class="material-symbols-outlined">id_card</span>
-                        </div>
-                        <input id="inputSesaId" v-model="form.update_sesaid" type="text" placeholder="Enter your SESAID" class="w-full input ps-12"> 
-                    </div>
-                    <InputLabel labelName="update_sesaid"/>
-                </div>
-
-                <div class="form-control">
-                    <div class="relative input-group border rounded-lg">
-                        <div class="absolute mt-3 flex items-center ps-3.5">
                             <span class="material-symbols-outlined">smartphone</span>
                             <span class="badge badge-ghost py-3 ml-2">+91</span>
                         </div>
@@ -80,7 +70,6 @@
     //Create a form
     const form = reactive({
         update_name: '',
-        update_sesaid: '',
         update_phoneno: '',
     });
 
@@ -101,38 +90,27 @@
 
         loading.continue = true;
 
-        const q = query(collection(db, "users"), and(where("sesaid", "==", form.update_sesaid), where("__name__", "!=", currentUser.value?.uid as string)));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-            addFieldAlert({
-                message: "User already exist.",
-                source: "server",
-                type: "error",
-                fieldid: "update_sesaid",
-            })
-        } else {
-            await setDoc(doc(db, "users", currentUser.value?.uid as string), {
-                name: form.update_name,
-                sesaid: form.update_sesaid,
-                phoneno: form.update_phoneno,
-                createdOn: serverTimestamp(),
-                admin: false,
-            });
-            completeProfileModal.open = false;
-            emit('loadProfile');
-            addToast({
-                message: "Profile updated successfully!",
-                type: "success",
-                duration: 2000,
-            } as ToastData);
-        }
+        await setDoc(doc(db, "users", currentUser.value?.uid as string), {
+            name: form.update_name,
+            phoneno: form.update_phoneno,
+            createdOn: serverTimestamp(),
+            admin: false,
+        });
+        completeProfileModal.open = false;
+        emit('loadProfile');
+        addToast({
+            message: "Profile updated successfully!",
+            type: "success",
+            duration: 2000,
+        } as ToastData);
+
         loading.continue = false;
     };
 
     const isProfileCompleted = async () => {
         const userSnap = await getDoc(doc(db, "users", currentUser.value?.uid as string));
         completeProfileModal.loading = false;
-        if (!userSnap.exists() || !userSnap.data().name || !userSnap.data().sesaid || !userSnap.data().phoneno) {
+        if (!userSnap.exists() || !userSnap.data().name || !userSnap.data().phoneno) {
             completeProfileModal.open = true;
         } 
     };

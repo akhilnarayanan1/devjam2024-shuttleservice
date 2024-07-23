@@ -1,6 +1,5 @@
 <template>
-    <Navbar />
-    <div v-if="!profile.sesaid">
+    <div v-if="!profile.name">
         <div class="flex justify-center mx-4">
             <div class="skelton h-16 max-w-96 ">
                 <span class="text-base-100">a</span>
@@ -11,7 +10,7 @@
     <div v-else>
         <div class="flex justify-center mx-4">
             <div class="alert bg-emerald-600 max-w-96 shadow-lg flex justify-between">
-                <span class="text-base-100">{{ profile.sesaid }}</span>
+                <span class="text-base-100">{{ profile.name }}</span>
             </div>
         </div>
 
@@ -26,7 +25,7 @@
                         </select>
 
                         <div class="flex justify-center items-center mt-4">
-                            <button class="btn btn-ghost btn-sm" @click="swapLocations">
+                            <button type="button" class="btn btn-ghost btn-sm" @click="swapLocations">
                                 <span class="material-symbols-outlined">swap_vert</span>
                                 SWAP
                                 <span class="material-symbols-outlined">swap_vert</span>
@@ -44,7 +43,6 @@
                             <span>START TRIP</span>
                         </button>
                     </form>
-                    <a :href="routeMapUrl" target="_blank" class="btn btn-circle btn-primary">Visit Map</a>
                 </div>
             </div> 
         </div>
@@ -90,14 +88,21 @@
             })
             return;
         }
-
+        if (!from.value.place || !to.value.place) {
+            addToast({
+                message: "Please select both From and To locations",
+                type: "error",
+                duration: 3000,
+            })
+            return;
+        }
         const { data: waResponse, status, error } = await useFetch<WhatsAppCTAMessage>(`/api/send-message-to-driver`, {
             method: "POST",
             body: {
                 origin: Object.keys(from.value.place)[0],
-                origin_place_id: Object.values(from.value.place)[0],
+                originPlaceId: Object.values(from.value.place)[0],
                 destination: Object.keys(to.value.place)[0],
-                destination_place_id: Object.values(to.value.place)[0],
+                destinationPlaceId: Object.values(to.value.place)[0],
                 travelmode: "driving",
             },
         });
@@ -106,6 +111,7 @@
             addToast({
                 message: JSON.stringify(error.value?.message),
                 type: "error",
+                duration: 3000,
             } as ToastData)
             return;
         }
@@ -113,6 +119,7 @@
         addToast({
             message: JSON.stringify(waResponse.value),
             type: "success",
+            duration: 3000,
         } as ToastData)
         
         

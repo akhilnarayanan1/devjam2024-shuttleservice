@@ -2,8 +2,11 @@
     <div>
       <div v-if="loading.page"><CircleLoad /></div>
       <div v-else>
+        <Navbar />
         <CompleteProfile @load-profile="loadProfile" />
-        <Dashboard />
+        <div v-if="userProfile.admin">
+          <Dashboard />
+        </div>
       </div>
     </div>
   </template>
@@ -21,6 +24,8 @@
   
     const currentUser = useCurrentUser();
     const db = useFirestore();
+
+    const userProfile = getProfile();
   
     watchEffect(() => loading.page = currentUser == undefined);
   

@@ -205,7 +205,6 @@ class ResetPasswordForm {
 
 interface TCompleteProfileForm {
   update_name: string;
-  update_sesaid: string;
   update_phoneno: number;
 }
 class CompleteProfileForm {
@@ -231,14 +230,6 @@ class CompleteProfileForm {
     //     fieldid: "update_name",
     //   } as AlertData);
     // };
-    if (this.form.update_sesaid.length <= 0) {
-      addFieldAlert({
-        message: "SESAID is reqired",
-        type: "error",
-        source: "ui",
-        fieldid: "update_sesaid",
-      } as AlertData);
-    };
     if (this.form.update_phoneno.toString().length <= 0) {
       addFieldAlert({
         message: "Phone Number is reqired",

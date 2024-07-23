@@ -24,10 +24,5 @@ export default defineNuxtConfig({
     GRAPH_API_TOKEN: process.env.GRAPH_API_TOKEN,
     BUSINESS_WA_NO: process.env.BUSINESS_WA_NO,
     ONE_DRIVER: process.env.ONE_DRIVER,
-  },
-  nitro: {
-    firebase: {
-      gen: 2
-    }
   }
 })

@@ -25,7 +25,6 @@ interface RandomKeyValue {
 interface FirestoreUserProfile{
   createdOn: Timestamp, 
   name: string, 
-  sesaid: string,
   phoneno: number,
   admin: boolean,
 };
