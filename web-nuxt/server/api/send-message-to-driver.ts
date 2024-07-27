@@ -1,14 +1,20 @@
-const objectToQueryString = (obj: Record<string, any>): string => {
-    return Object.entries(obj)
-      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-      .join('&');
+// keys present in filter will be removed from the query parsing
+const objectToQueryString = (obj: Record<string, any>, filterKeys: Array<string>): string => {
+  const filteredObj = Object.fromEntries(
+    Object.entries(obj).filter(([key]) => !filterKeys.includes(key))
+  );
+
+  return Object.entries(filteredObj)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join('&');
 }
 
 export default defineEventHandler(async (event) => {
     const body = await readBody(event);
 
-    if (body["origin"] === undefined || body["destination"] === undefined ||
-        body["origin_place_id"] === "" || body["destination_place_id"] === "") {
+    if (body["origin"] === "" || body["destination"] === "" ||
+        body["origin_place_id"] === "" || body["destination_place_id"] === "" ||
+        body["originShortName"] === "" || body["destinationShortName"] === "") {
         throw createError({
           statusCode: 422,
           statusMessage: "Necessary parameters not present"
@@ -18,7 +24,7 @@ export default defineEventHandler(async (event) => {
     const { GRAPH_API_VERSION, GRAPH_API_TOKEN, BUSINESS_WA_NO, ONE_DRIVER } = useRuntimeConfig(event);
     const API_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}/${BUSINESS_WA_NO}/messages`
 
-    const query_parsed = objectToQueryString(body)
+    const query_parsed = objectToQueryString(body, ["originShortName", "destinationShortName"]);
 
     const repo = await $fetch(API_URL, {
         method: "POST",
@@ -34,7 +40,7 @@ export default defineEventHandler(async (event) => {
               "type": "cta_url",
               /* Body optional */
               "body": {
-                "text": `🚀 Route plan 🚀\n\n📍*${body.origin}* ➡️ 📍*${body.destination}*\n\nLet's go! 🚗💨`,
+                "text": `🚀 Route plan 🚀\n\n📍*${body.originShortName}* ➡️ 📍*${body.destinationShortName}*\n\nLet's go! 🚗💨`,
               },
               "action": {
                 "name": "cta_url",

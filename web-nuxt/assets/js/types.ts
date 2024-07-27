@@ -44,6 +44,34 @@ interface WhatsAppCTAMessage {
   messages: { id: string }[],
 };
 
+
+interface Location { 
+  shortname: string,
+  placename: string,
+  placeid: string,
+  routekey?: "office" | "metro",
+};
+
+interface LocationStore {
+  id: string;
+  place: Location
+};
+
+interface ShuttleDetails{
+  orderid: string, 
+  type: "pick" | "drop", 
+  time: string
+};
+
+interface Shuttle extends ShuttleDetails {
+  number: number;
+};
+
+interface Route {
+  from: LocationStore;
+  to: LocationStore;
+};
+
 export type {
   AlertData,
   ToastData,
@@ -51,4 +79,9 @@ export type {
   FirestoreUserProfile,
   MessageDetails,
   WhatsAppCTAMessage,
+  Location,
+  LocationStore,
+  Shuttle,
+  ShuttleDetails,
+  Route,
 };
