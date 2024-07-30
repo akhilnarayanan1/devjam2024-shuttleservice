@@ -15,6 +15,9 @@ import type {Request, Response} from "express";
 import {initializeApp} from "firebase-admin/app";
 import * as admin from "firebase-admin";
 import {FieldValue} from "firebase-admin/firestore";
+import type {Timestamp} from "firebase-admin/firestore";
+import {DateTime} from "luxon";
+import * as _ from "lodash";
 
 const {WEBHOOK_VERIFY_TOKEN, GRAPH_API_TOKEN, GRAPH_API_VERSION, BUSINESS_WA_NO} = process.env;
 
@@ -41,19 +44,27 @@ initializeApp();
 // });
 
 // app.get("/test", async (req: Request, res: Response) => {
-//   const shuttleTimings = {id: "7", title: "10:45 AM"};
-//   const time = shuttleTimings?.title;
-//   const pickOrDrop = findTitleInSections(shuttleTimings, allSections) as PickDropRequest;
+//   const messageFrom = "917987089820";
+//   // const shuttleTimings = {id: "7", title: "10:45 AM"};
+//   const time = "06:53 PM";
+//   const pickOrDrop = "drop";
 
-//   if (isUpdateEligible(time)) {
-//     await putRequest(pickOrDrop, "917987089820", time);
-//     await normalMessage("917987089820", "Scheduled for " + pickOrDrop + " at " + time + ".");
-//   } else {
-//     await normalMessage("917987089820", "Invalid time requested");
-//   }
+//   await putRequest(pickOrDrop, messageFrom, time);
 
 //   res.sendStatus(200);
 // });
+
+interface RequestStore {
+  id: string,
+  data: {
+    type: PickDropRequest,
+    from: LocationStore,
+    to: LocationStore,
+    time: string,
+    pending: boolean,
+    createdAt: Timestamp,
+  }
+}
 
 
 interface Location {
@@ -70,7 +81,20 @@ interface LocationStore {
 
 type PickDropRequest = "pick" | "drop";
 
-const isUpdateEligible = (timeString: string) => {
+const populateRequest = async (messageFrom: string) => {
+  const requests: RequestStore[] = [];
+  await admin.firestore().collection("request")
+    .where("for", "==", messageFrom)
+    .where("pending", "==", true)
+    .get().then((querySnapshot) => {
+      querySnapshot.forEach((doc) => {
+        requests.push({id: doc.id, data: doc.data()} as RequestStore);
+      });
+    });
+  return requests;
+};
+
+const convertUserTime = (timeString: string) => {
   // Split the time string into hours, minutes, and AM/PM
   const [time, period] = timeString.split(" ");
   const [hours, minutes] = time.split(":");
@@ -84,22 +108,31 @@ const isUpdateEligible = (timeString: string) => {
     hour = 0;
   }
 
-  // Calculate the offset for UTC+5:30 in milliseconds
-  const offsetMilliseconds = 5 * 60 * 60 * 1000 + 30 * 60 * 1000;
-
   // Create a Date object for today in UTC
-  const todayNowUTC = new Date();
-  const fullYearIndia = new Date(todayNowUTC.getTime() + offsetMilliseconds).getFullYear();
-  const monthIndia = new Date(todayNowUTC.getTime() + offsetMilliseconds).getMonth();
-  const dateIndia = new Date(todayNowUTC.getTime() + offsetMilliseconds).getDate();
+  const todayNowIndia = DateTime.now().setZone("Asia/Kolkata");
+  const fullYearIndia = todayNowIndia.year;
+  const monthIndia = todayNowIndia.month;
+  const dateIndia = todayNowIndia.day;
 
   // Create another Date object for today in UTC+5:30 with specified hour and minute
-  const userDateNowIndia = new Date(fullYearIndia, monthIndia, dateIndia, hour, minute, 0, 0);
+  const userDateNowIndia = todayNowIndia.set({
+    year: fullYearIndia,
+    month: monthIndia,
+    day: dateIndia,
+    hour: hour,
+    minute: minute,
+    second: 0,
+    millisecond: 0,
+  });
 
-  const userDateNowUTC = new Date(userDateNowIndia.getTime() - offsetMilliseconds);
+  return {todayNowIndia, userDateNowIndia};
+};
+
+const isUpdateEligible = (timeString: string) => {
+  const {todayNowIndia, userDateNowIndia} = convertUserTime(timeString);
 
   // Calculate the difference in milliseconds
-  const diff = todayNowUTC.getTime() - userDateNowUTC.getTime();
+  const diff = todayNowIndia.toMillis() - userDateNowIndia.toMillis();
   const diffInSeconds = diff / 1000;
 
   return diffInSeconds < 0 ? true: false;
@@ -110,7 +143,7 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
   const locations: LocationStore[] = [];
   let from = {} as LocationStore;
   let to = {} as LocationStore;
-
+  const {userDateNowIndia} = convertUserTime(time);
   await admin.firestore().collection("locations").get().then((querySnapshot) => {
     querySnapshot.forEach((doc) => {
       locations.push({id: doc.id, place: doc.data() as Location});
@@ -125,14 +158,25 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
     to = locations.find((location) => location.place.routekey === "metro") as LocationStore;
   }
 
-  await admin.firestore().collection("request").add({
+  const payload = {
     type: requestType,
     from: from,
     to: to,
     for: user,
     time: time,
+    timeindia: userDateNowIndia.toJSDate(),
+    pending: true,
     createdAt: FieldValue.serverTimestamp(),
-  });
+  };
+
+  const request = await populateRequest(user);
+  console.log(payload, request, requestType, _.some(request, ["data.type", requestType]));
+  if (_.some(request, ["data.type", requestType]) ) {
+    const docid = _.filter(request, ["data.type", requestType])[0].id;
+    await admin.firestore().collection("request").doc(docid).update(payload);
+  } else {
+    await admin.firestore().collection("request").add(payload);
+  }
 };
 
 
@@ -140,6 +184,8 @@ const MESSAGES_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}/${BUSINESS
 
 const pickReply = {id: "1", title: "Pick"};
 const dropReply = {id: "2", title: "Drop"};
+const editPickReply = {id: "3", title: "Edit Pick"};
+const editDropReply = {id: "4", title: "Edit Drop"};
 
 const pickSection = {
   title: "pick",
@@ -220,7 +266,12 @@ const sendPickDropList = async (messageFrom: string, routeType: PickDropRequest)
 };
 
 
-const sendChoice = async (messageFrom: string) => {
+const sendChoice = async (
+  messageFrom: string,
+  headerText: string,
+  bodyText: string,
+  buttons: {type: string, reply: {id: string, title: string}}[]
+) => {
   await axios({
     method: "POST",
     url: MESSAGES_URL,
@@ -232,13 +283,10 @@ const sendChoice = async (messageFrom: string) => {
       type: "interactive",
       interactive: {
         type: "button",
-        header: {type: "text", text: "Pick Route Type"},
-        body: {text: "<BODY_TEXT>"},
+        header: {type: "text", text: headerText},
+        body: {text: bodyText},
         action: {
-          buttons: [
-            {type: "reply", reply: pickReply},
-            {type: "reply", reply: dropReply},
-          ],
+          buttons: buttons,
         },
       },
     },
@@ -272,6 +320,12 @@ app.post("/webhook", async (req: Request, res: Response) => {
     if (JSON.stringify(message?.interactive?.button_reply) === JSON.stringify(dropReply)) {
       await sendPickDropList(messageFrom, "drop");
     }
+    if (JSON.stringify(message?.interactive?.button_reply) === JSON.stringify(editPickReply)) {
+      await sendPickDropList(messageFrom, "pick");
+    }
+    if (JSON.stringify(message?.interactive?.button_reply) === JSON.stringify(editDropReply)) {
+      await sendPickDropList(messageFrom, "drop");
+    }
   }
 
   if (message?.type === "interactive" && message?.interactive?.type === "list_reply") {
@@ -290,11 +344,53 @@ app.post("/webhook", async (req: Request, res: Response) => {
 
   // check if the incoming message contains text
   if (message?.type === "text") {
-    // Check in DB if any pending request to fulfil
+    const buttonsEditPickType = [
+      {type: "reply", reply: editPickReply},
+      {type: "reply", reply: dropReply},
+    ];
 
+    const buttonsEditDropType = [
+      {type: "reply", reply: pickReply},
+      {type: "reply", reply: editDropReply},
+    ];
 
-    // else send fresh message to register.
-    await sendChoice(messageFrom);
+    const buttonsEditPickDropType = [
+      {type: "reply", reply: editPickReply},
+      {type: "reply", reply: editDropReply},
+    ];
+
+    const buttonsPickDropType = [
+      {type: "reply", reply: pickReply},
+      {type: "reply", reply: dropReply},
+    ];
+
+    let requests: RequestStore[] = [];
+    requests = await populateRequest(messageFrom);
+
+    if (requests.length > 0) {
+      const hasPickType = _.some(requests, ["data.type", "pick"]);
+      const hasDropType = _.some(requests, ["data.type", "drop"]);
+      const filteredPick = _.filter(requests, ["data.type", "pick"]);
+      const filteredDrop = _.filter(requests, ["data.type", "drop"]);
+
+      const editHeader = "Edit/New Route Type";
+
+      if (hasPickType && hasDropType) {
+        const editBody = `You already both pickup (${filteredPick[0].data.time}) 
+          & drop (${filteredDrop[0].data.time}) route. Edit it?`;
+        await sendChoice(messageFrom, editHeader, editBody, buttonsEditPickDropType);
+      } else if (hasPickType) {
+        const editBody = `You already have a pickup (${filteredPick[0].data.time}) route. Edit it?`;
+        await sendChoice(messageFrom, editHeader, editBody, buttonsEditPickType);
+      } else {
+        const editBody = `You already have a drop(${filteredDrop[0].data.time}) route. Edit it?`;
+        await sendChoice(messageFrom, editHeader, editBody, buttonsEditDropType);
+      }
+    } else {
+      // else send fresh message to register.
+      const editBody = "Please select the route type";
+      await sendChoice(messageFrom, "Pick Route Type", editBody, buttonsPickDropType);
+    }
 
     // mark incoming message as read
     await axios({
