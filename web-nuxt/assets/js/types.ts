@@ -70,6 +70,7 @@ interface Shuttle extends ShuttleDetails {
 interface Route {
   from: LocationStore;
   to: LocationStore;
+  createdOn: Timestamp;
 };
 
 export type {

@@ -18,12 +18,12 @@
                 <div tabindex="0" role="button" class="btn btn-ghost">
                     <span class="material-symbols-outlined">more_vert</span>
                 </div>
-                <ul v-if="!profile.name" tabindex="0" class="menu dropdown-content p-2 shadow bg-base-100 rounded-box w-52 mt-4">
+                <ul v-if="!profile.name" tabindex="0" class="menu dropdown-content p-2 bg-base-100 z-[1] shadow-lg rounded-box w-52 mt-4">
                     <div v-for="_ in Array.from({length: 3})">
                         <li><a class="skeleton h-3 w-14 my-2"></a></li> 
                     </div>
                 </ul>
-                <ul v-else tabindex="0" class="menu dropdown-content p-2 shadow bg-base-100 rounded-box w-52 mt-4">
+                <ul v-else tabindex="0" class="menu dropdown-content p-2 shadows bg-base-100 z-[1] shadow-lg rounded-box w-52 mt-4">
                     <li><a>Edit Profile</a></li> 
                     <li onclick="logout_confirm.showModal()"><a>Logout</a></li>
                 </ul>

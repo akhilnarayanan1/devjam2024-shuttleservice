@@ -5,7 +5,10 @@
         <Navbar />
         <CompleteProfile @load-profile="loadProfile" />
         <div v-if="userProfile.admin">
-          <Dashboard />
+          <AdminDashboard />
+        </div>
+        <div v-else>
+          <UserDashboard />
         </div>
       </div>
     </div>

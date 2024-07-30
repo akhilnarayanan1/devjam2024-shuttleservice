@@ -10,7 +10,7 @@
                         <select v-model="route" class="select select-bordered w-full max-w-xs">
                             <option disabled selected>Pick a shuttle</option>
                             <option v-for="shuttle in _.orderBy(shuttles, ['type', 'orderid'], ['desc', 'asc'])" :key="shuttle.time" :value="shuttle">
-                                {{ shuttle.type }} - {{ shuttle.time }} - {{ shuttle.number }} 
+                                {{ shuttle.type }} - {{ shuttle.time }}
                             </option>
                         </select>
                         
@@ -46,7 +46,7 @@
 
 
 <script setup lang="ts">
-    import { collection, query, getDocs, addDoc } from "firebase/firestore";
+    import { collection, query, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
     import type { ToastData, WhatsAppCTAMessage, Location, LocationStore, Shuttle, Route } from "~/assets/js/types";
     import _ from "lodash";
 
@@ -83,7 +83,7 @@
     
 
     const startTrip = async () => {
-        if (from.value.id === to.value.id) {
+        if (from.value.id == to.value.id) {
             addToast({
                 message: "From and To locations cannot be the same",
                 type: "error",
@@ -91,7 +91,7 @@
             })
             return;
         }
-        if (!from.value || !to.value) {
+        if (!from.value.id || !to.value.id) {
             addToast({
                 message: "Please select both From and To locations",
                 type: "error",
@@ -105,6 +105,7 @@
         await addDoc(collection(db, "routes"), {
             from: from.value,
             to: to.value,
+            createdOn: serverTimestamp(),
         } as Route);
 
         const { data: waResponse, status, error } = await useFetch<WhatsAppCTAMessage>(`/api/send-message-to-driver`, {
