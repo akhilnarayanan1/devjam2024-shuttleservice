@@ -35,22 +35,31 @@ initializeApp();
 
 //   await admin.firestore().collection("locations").add({
 //     shortname: "Schenider - Argon North",
-//     placename: "Argon North",
+//     placename: "Bagmane Argon",
 //     placeid: "ChIJ02GMFAATrjsRjGa_utASi_w",
-//     routekey: "office",
+//     routekey: "argon",
+//   });
+
+//   await admin.firestore().collection("locations").add({
+//     shortname: "Bagmane Xenon",
+//     placename: "Bagmane Xenon",
+//     placeid: "ChIJI_q8OnsTrjsRfgm5xIdKTt4",
+//     routekey: "xenon",
+//   });
+
+//   await admin.firestore().collection("locations").add({
+//     shortname: "Bagmane Neon",
+//     placename: "Bagmane Neon",
+//     placeid: "ChIJq8nbVlsTrjsR80URA0Zth5M",
+//     routekey: "neon",
 //   });
 
 //   res.sendStatus(200);
 // });
 
 // app.get("/test", async (req: Request, res: Response) => {
-//   const messageFrom = "917987089820";
-//   // const shuttleTimings = {id: "7", title: "10:45 AM"};
-//   const time = "06:53 PM";
-//   const pickOrDrop = "drop";
-
-//   await putRequest(pickOrDrop, messageFrom, time);
-
+ 
+//   // await putRequest("drop", "917987089820", "06:30 PM");
 //   res.sendStatus(200);
 // });
 
@@ -58,8 +67,7 @@ interface RequestStore {
   id: string,
   data: {
     type: PickDropRequest,
-    from: LocationStore,
-    to: LocationStore,
+    routemap: string,
     time: string,
     pending: boolean,
     createdAt: Timestamp,
@@ -71,7 +79,7 @@ interface Location {
   shortname: string,
   placename: string,
   placeid: string,
-  routekey?: "office" | "metro",
+  routekey: string,
 }
 
 interface LocationStore {
@@ -138,11 +146,38 @@ const isUpdateEligible = (timeString: string) => {
   return diffInSeconds < 0 ? true: false;
 };
 
+const createMapsUrl = (locations: LocationStore[], route: string[]) => {
+  const originVal = locations.find((location) => location.place?.routekey === route.at(0)) as LocationStore;
+  const destinationVal = locations.find((location) => location.place?.routekey === route.at(-1)) as LocationStore;
+
+  const origin = encodeURIComponent(originVal.place.placename);
+  const origin_place_id = originVal.place.placeid;
+
+  const destination = encodeURIComponent(destinationVal.place.placename);
+  const destination_place_id = destinationVal.place.placeid;
+
+  const waypoints = route.slice(1, -1).reduce((joinedString, waypoint) => {
+    const waypointVal = locations.find((location) => location.place?.routekey === waypoint) as LocationStore;
+    return joinedString ? `${encodeURIComponent(joinedString+"|"+waypointVal.place.placename)}` 
+      : encodeURIComponent(waypointVal.place.placename);
+  }, "");
+
+  const waypoint_place_ids = route.slice(1, -1).reduce((joinedString, waypoint) => {
+    const waypointVal = locations.find((location) => location.place?.routekey === waypoint) as LocationStore;
+    return joinedString ? `${encodeURIComponent(joinedString+"|"+waypointVal.place.placeid)}` 
+      : encodeURIComponent(waypointVal.place.placeid);
+  }, "");
+    
+  const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&
+    origin_place_id=${origin_place_id}&destination=${destination}&
+    destination_place_id=${destination_place_id}&waypoints=${waypoints}&
+    waypoint_place_ids=${waypoint_place_ids}&travelmode=driving&dir_action=navigate`;
+  
+  return mapsUrl;
+};
 
 const putRequest = async (requestType: PickDropRequest, user: string, time: string) => {
   const locations: LocationStore[] = [];
-  let from = {} as LocationStore;
-  let to = {} as LocationStore;
   const {userDateNowIndia} = convertUserTime(time);
   await admin.firestore().collection("locations").get().then((querySnapshot) => {
     querySnapshot.forEach((doc) => {
@@ -150,18 +185,19 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
     });
   });
 
+  let mapsUrl = "";
+
   if (requestType === "pick") {
-    from = locations.find((location) => location.place?.routekey === "metro") as LocationStore;
-    to = locations.find((location) => location.place?.routekey === "office") as LocationStore;
+    const route = ["metro", "neon", "xenon", "argon"];
+    mapsUrl += createMapsUrl(locations, route);
   } else {
-    from = locations.find((location) => location.place.routekey === "office") as LocationStore;
-    to = locations.find((location) => location.place.routekey === "metro") as LocationStore;
+    const route = ["xenon", "neon", "argon", "metro"];
+    mapsUrl += createMapsUrl(locations, route);
   }
 
   const payload = {
     type: requestType,
-    from: from,
-    to: to,
+    routemap: mapsUrl,
     for: user,
     time: time,
     timeindia: userDateNowIndia.toJSDate(),

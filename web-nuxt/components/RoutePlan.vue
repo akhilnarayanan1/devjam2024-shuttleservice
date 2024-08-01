@@ -80,6 +80,17 @@
             to.value = locations.find(location => location.place.routekey === "metro") as LocationStore;
         }
     });
+
+    // keys present in filter will be removed from the query parsing
+    const objectToQueryString = (obj: Record<string, any>, filterKeys: Array<string>): string => {
+    const filteredObj = Object.fromEntries(
+        Object.entries(obj).filter(([key]) => !filterKeys.includes(key))
+    );
+
+    return Object.entries(filteredObj)
+        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+        .join('&');
+    };
     
 
     const startTrip = async () => {
@@ -107,25 +118,66 @@
             to: to.value,
             createdOn: serverTimestamp(),
         } as Route);
+        
+        const config = useRuntimeConfig()
+        const { GRAPH_API_VERSION, BUSINESS_WA_NO, GRAPH_API_TOKEN } = config.public;
 
-        const { data: waResponse, status, error } = await useFetch<WhatsAppCTAMessage>(`/api/send-message-to-driver`, {
-            method: "POST",
-            body: {
-                origin:  from.value.place.placename,
-                originPlaceId: from.value.place.placeid,
-                destination: to.value.place.placename,
-                destinationPlaceId: to.value.place.placeid,
-                originShortName: from.value.place.shortname,
-                destinationShortName: to.value.place.shortname,
-                travelmode: "driving",
-            },
+        const API_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}/${BUSINESS_WA_NO}/messages`;
+        const body = {
+            origin:  from.value.place.placename,
+            originPlaceId: from.value.place.placeid,
+            destination: to.value.place.placename,
+            destinationPlaceId: to.value.place.placeid,
+            originShortName: from.value.place.shortname,
+            destinationShortName: to.value.place.shortname,
+            travelmode: "driving",
+        }
+
+        if (body["origin"] === "" || body["destination"] === "" ||
+            body["originPlaceId"] === "" || body["destinationPlaceId"] === "" ||
+            body["originShortName"] === "" || body["destinationShortName"] === "") {
+            addToast({
+                message: "Missing required fields",
+                type: "error",
+                duration: 3000,
+            } as ToastData)
+            return;
+        }
+        const query_parsed = objectToQueryString(body, ["originShortName", "destinationShortName"]);
+
+        const {data: waResponse, status, error} = await useFetch(API_URL, {
+                server: true,
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${GRAPH_API_TOKEN}`
+                },
+                body: {
+                    "messaging_product": "whatsapp",
+                    "recipient_type": "individual",
+                    "to": "917987089820",
+                    "type": "interactive",
+                    "interactive": {
+                    "type": "cta_url",
+                    /* Body optional */
+                    "body": {
+                        "text": `🚀 Route plan 🚀\n\n📍*${body.originShortName}* ➡️ 📍*${body.destinationShortName}*\n\nLet's go! 🚗💨`,
+                    },
+                    "action": {
+                        "name": "cta_url",
+                        "parameters": {
+                        "display_text": "OPEN MAPS",
+                        "url": `https://www.google.com/maps/dir/?api=1&${query_parsed}`
+                        }
+                    }
+                }
+            }
         });
 
         loading.form_route_plan = false;
 
-        if (error.value) {
+        if (status.value === "error") {
             addToast({
-                message: JSON.stringify(error.value?.message),
+                message: JSON.stringify(error.value?.data),
                 type: "error",
                 duration: 3000,
             } as ToastData)
@@ -137,7 +189,6 @@
             type: "success",
             duration: 3000,
         } as ToastData)
-        
         
     };
     

@@ -19,10 +19,10 @@ export default defineNuxtConfig({
     },
   },
   runtimeConfig: {
-    WEBHOOK_VERIFY_TOKEN: process.env.WEBHOOK_VERIFY_TOKEN,
-    GRAPH_API_VERSION: process.env.GRAPH_API_VERSION,
-    GRAPH_API_TOKEN: process.env.GRAPH_API_TOKEN,
-    BUSINESS_WA_NO: process.env.BUSINESS_WA_NO,
-    ONE_DRIVER: process.env.ONE_DRIVER,
+    public: {
+      BUSINESS_WA_NO: process.env.BUSINESS_WA_NO,
+      GRAPH_API_VERSION: process.env.GRAPH_API_VERSION,
+      GRAPH_API_TOKEN: process.env.GRAPH_API_TOKEN,
+    },
   }
 })
