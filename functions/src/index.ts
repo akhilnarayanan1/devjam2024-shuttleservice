@@ -58,7 +58,7 @@ initializeApp();
 // });
 
 // app.get("/test", async (req: Request, res: Response) => {
- 
+
 //   // await putRequest("drop", "917987089820", "06:30 PM");
 //   res.sendStatus(200);
 // });
@@ -151,28 +151,28 @@ const createMapsUrl = (locations: LocationStore[], route: string[]) => {
   const destinationVal = locations.find((location) => location.place?.routekey === route.at(-1)) as LocationStore;
 
   const origin = encodeURIComponent(originVal.place.placename);
-  const origin_place_id = originVal.place.placeid;
+  const originPlaceId = originVal.place.placeid;
 
   const destination = encodeURIComponent(destinationVal.place.placename);
-  const destination_place_id = destinationVal.place.placeid;
+  const destinationPlaceId = destinationVal.place.placeid;
 
   const waypoints = route.slice(1, -1).reduce((joinedString, waypoint) => {
     const waypointVal = locations.find((location) => location.place?.routekey === waypoint) as LocationStore;
-    return joinedString ? `${encodeURIComponent(joinedString+"|"+waypointVal.place.placename)}` 
-      : encodeURIComponent(waypointVal.place.placename);
+    return joinedString ? `${encodeURIComponent(joinedString+"|"+waypointVal.place.placename)}` :
+      encodeURIComponent(waypointVal.place.placename);
   }, "");
 
-  const waypoint_place_ids = route.slice(1, -1).reduce((joinedString, waypoint) => {
+  const waypointPlaceIds = route.slice(1, -1).reduce((joinedString, waypoint) => {
     const waypointVal = locations.find((location) => location.place?.routekey === waypoint) as LocationStore;
-    return joinedString ? `${encodeURIComponent(joinedString+"|"+waypointVal.place.placeid)}` 
-      : encodeURIComponent(waypointVal.place.placeid);
+    return joinedString ? `${encodeURIComponent(joinedString+"|"+waypointVal.place.placeid)}` :
+      encodeURIComponent(waypointVal.place.placeid);
   }, "");
-    
+
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&
-    origin_place_id=${origin_place_id}&destination=${destination}&
-    destination_place_id=${destination_place_id}&waypoints=${waypoints}&
-    waypoint_place_ids=${waypoint_place_ids}&travelmode=driving&dir_action=navigate`;
-  
+    origin_place_id=${originPlaceId}&destination=${destination}&
+    destination_place_id=${destinationPlaceId}&waypoints=${waypoints}&
+    waypoint_place_ids=${waypointPlaceIds}&travelmode=driving&dir_action=navigate`;
+
   return mapsUrl;
 };
 
