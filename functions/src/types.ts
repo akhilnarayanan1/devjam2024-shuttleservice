@@ -1,4 +1,5 @@
 import type {Timestamp} from "firebase-admin/firestore";
+import type {DateTime} from "luxon";
 
 interface RequestStore {
     id: string;
@@ -6,8 +7,11 @@ interface RequestStore {
         type: PickDropRequest;
         routemap: string;
         time: string;
+        timeindia: DateTime;
         pending: boolean;
+        expired: boolean;
         createdAt: Timestamp;
+        updatedAt: Timestamp;
     }
 }
 

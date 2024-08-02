@@ -3,10 +3,17 @@ const {GRAPH_API_VERSION, BUSINESS_WA_NO} = process.env;
 
 const MESSAGES_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}/${BUSINESS_WA_NO}/messages`;
 
+const TIMEZONE = "Asia/Kolkata";
+
 const PICK_REPLY = {id: "1", title: "Pick"};
 const DROP_REPLY = {id: "2", title: "Drop"};
 const EDIT_PICK_REPLY = {id: "3", title: "Edit Pick"};
 const EDIT_DROP_REPLY = {id: "4", title: "Edit Drop"};
+
+const ROUTE_PICK = ["metro", "neon", "xenon", "argon"];
+const ROUTE_DROP = ["xenon", "neon", "argon", "metro"];
+const DEMO_ROUTE_HOME = ["home", "argon"];
+const DEMO_ROUTE_OFFICE = ["argon", "metro"];
 
 const PICK_SECTION = {
   title: "pick",
@@ -39,5 +46,5 @@ const DROP_SECTION = {
 
 const ALL_SECTIONS = [PICK_SECTION, DROP_SECTION];
 
-export {ALL_SECTIONS, PICK_REPLY, DROP_REPLY, EDIT_PICK_REPLY,
-  EDIT_DROP_REPLY, MESSAGES_URL, PICK_SECTION, DROP_SECTION};
+export {ALL_SECTIONS, PICK_REPLY, DROP_REPLY, EDIT_PICK_REPLY, EDIT_DROP_REPLY, MESSAGES_URL,
+  PICK_SECTION, DROP_SECTION, ROUTE_PICK, ROUTE_DROP, DEMO_ROUTE_HOME, DEMO_ROUTE_OFFICE, TIMEZONE};

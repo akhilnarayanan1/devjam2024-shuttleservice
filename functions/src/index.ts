@@ -9,15 +9,17 @@
 
 import * as logger from "firebase-functions/logger";
 import {onRequest} from "firebase-functions/v2/https";
+import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as express from "express";
 import axios from "axios";
 import type {Request, Response} from "express";
 import {initializeApp} from "firebase-admin/app";
 import type {PickDropRequest, RequestStore} from "./types";
-import {findTitleInSections, sendChoice, normalMessage,
-  sendPickDropList, populateRequest, putRequest} from "./functions";
+import {findTitleInSections, sendChoice, normalMessage, sendPickDropList,
+  populateRequest, putRequest, setExpiredRequests} from "./functions";
 import * as _ from "lodash";
-import {ALL_SECTIONS, PICK_REPLY, DROP_REPLY, EDIT_PICK_REPLY, EDIT_DROP_REPLY, MESSAGES_URL} from "./constants";
+import {ALL_SECTIONS, PICK_REPLY, DROP_REPLY, EDIT_PICK_REPLY,
+  EDIT_DROP_REPLY, MESSAGES_URL, TIMEZONE} from "./constants";
 
 const {GRAPH_API_TOKEN, WEBHOOK_VERIFY_TOKEN} = process.env;
 
@@ -57,11 +59,15 @@ initializeApp();
 //   res.sendStatus(200);
 // });
 
-// app.get("/test", async (req: Request, res: Response) => {
+app.get("/test", async (req: Request, res: Response) => {
+  // await putRequest("pick", "918109062610", "09:50 AM");
+  // let requests: RequestStore[] = [];
+  // requests = await populateRequest("917987089820");
 
-//   // await putRequest("drop", "917987089820", "06:30 PM");
-//   res.sendStatus(200);
-// });
+
+  res.sendStatus(200);
+});
+
 
 app.post("/webhook", async (req: Request, res: Response) => {
   // check if the webhook request contains a message
@@ -184,3 +190,10 @@ app.get("/webhook", (req: Request, res: Response) => {
 });
 
 exports.api = onRequest(app);
+
+exports.api_schedule = onSchedule(
+  {schedule: "5,10,25,40,45 8,9,10,11,4,5,6,7 * * *", timeZone: TIMEZONE},
+  async (event) => {
+    logger.log("Scheduled function triggered", event);
+    await setExpiredRequests();
+});

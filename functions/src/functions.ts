@@ -2,9 +2,9 @@ import {DateTime} from "luxon";
 import type {LocationStore, PickDropRequest, RequestStore, Location} from "./types";
 import axios from "axios";
 import * as admin from "firebase-admin";
-import {FieldValue} from "firebase-admin/firestore";
+import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import * as _ from "lodash";
-import {MESSAGES_URL, PICK_SECTION, DROP_SECTION} from "./constants";
+import {MESSAGES_URL, PICK_SECTION, DROP_SECTION, ROUTE_PICK, ROUTE_DROP, TIMEZONE} from "./constants";
 
 const {GRAPH_API_TOKEN} = process.env;
 
@@ -75,7 +75,7 @@ const convertUserTime = (timeString: string) => {
   }
 
   // Create a Date object for today in UTC
-  const todayNowIndia = DateTime.now().setZone("Asia/Kolkata");
+  const todayNowIndia = DateTime.now().setZone(TIMEZONE);
   const fullYearIndia = todayNowIndia.year;
   const monthIndia = todayNowIndia.month;
   const dateIndia = todayNowIndia.day;
@@ -92,6 +92,20 @@ const convertUserTime = (timeString: string) => {
   });
 
   return {todayNowIndia, userDateNowIndia};
+};
+
+const setExpiredRequests = async () => {
+  const todayNow = DateTime.now().setZone(TIMEZONE).toJSDate();
+  const batch = admin.firestore().batch();
+  await admin.firestore().collection("request")
+    .where("expired", "==", false)
+    .where("timeindia", "<", Timestamp.fromDate(todayNow)).get()
+    .then((snapshot) => snapshot.forEach((doc) => batch.update(doc.ref, {
+      pending: false,
+      expired: true,
+      updatedAt: FieldValue.serverTimestamp(),
+    })));
+  batch.commit();
 };
 
 
@@ -179,6 +193,7 @@ const populateRequest = async (messageFrom: string) => {
   await admin.firestore().collection("request")
     .where("for", "==", messageFrom)
     .where("pending", "==", true)
+    .where("expired", "==", false)
     .get().then((querySnapshot) => {
       querySnapshot.forEach((doc) => {
         requests.push({id: doc.id, data: doc.data()} as RequestStore);
@@ -192,19 +207,16 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
   const locations: LocationStore[] = [];
   const {userDateNowIndia} = convertUserTime(time);
   await admin.firestore().collection("locations").get().then((querySnapshot) => {
-    querySnapshot.forEach((doc) => {
-      locations.push({id: doc.id, place: doc.data() as Location});
-    });
+    querySnapshot.forEach((doc) => locations.push({id: doc.id, place: doc.data() as Location}));
   });
 
   let mapsUrl = "";
 
   if (requestType === "pick") {
-    const route = ["metro", "neon", "xenon", "argon"];
-    mapsUrl += createMapsUrl(locations, route);
-  } else {
-    const route = ["xenon", "neon", "argon", "metro"];
-    mapsUrl += createMapsUrl(locations, route);
+    mapsUrl += createMapsUrl(locations, ROUTE_PICK);
+  }
+  if (requestType === "drop") {
+    mapsUrl += createMapsUrl(locations, ROUTE_DROP);
   }
 
   const payload = {
@@ -214,7 +226,8 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
     time: time,
     timeindia: userDateNowIndia.toJSDate(),
     pending: true,
-    createdAt: FieldValue.serverTimestamp(),
+    expired: false,
+    updatedAt: FieldValue.serverTimestamp(),
   };
 
   const request = await populateRequest(user);
@@ -223,9 +236,9 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
     const docid = _.filter(request, ["data.type", requestType])[0].id;
     await admin.firestore().collection("request").doc(docid).update(payload);
   } else {
-    await admin.firestore().collection("request").add(payload);
+    await admin.firestore().collection("request").add({...payload, createdAt: FieldValue.serverTimestamp()});
   }
 };
 
 export {isTimeValid, createMapsUrl, findTitleInSections, convertUserTime,
-  sendChoice, normalMessage, sendPickDropList, populateRequest, putRequest};
+  sendChoice, normalMessage, sendPickDropList, populateRequest, putRequest, setExpiredRequests};
