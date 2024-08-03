@@ -48,6 +48,24 @@ const createMapsUrl = (locations: LocationStore[], route: string[]) => {
   return mapsUrl;
 };
 
+const createRouteMessage = (locations: LocationStore[], route: string[], time: string) => {
+  const originVal = locations.find((location) => location.place?.routekey === route.at(0)) as LocationStore;
+  const destinationVal = locations.find((location) => location.place?.routekey === route.at(-1)) as LocationStore;
+
+  const origin = originVal.place.shortname;
+  const destination = destinationVal.place.shortname;
+
+  const message = `Scheduled for ${time}.\n\n\n` +
+  "*Be the 'LEADER':* The first person to share their live location will be the 'LEADER'.\n\n" +
+  "*Real-time updates:* Everyone can track the LEADER's trip progress.\n\n" +
+  "*Smooth pickup:* Share your location when you're close to the pickup point.\n\n" +
+  "_How to Share Live-Location?🤔_\n\n" +
+  "*Will send a reminder again few minutes before the trip* (if no live location is shared).\n\n" +
+  `📍*Pickup* - *${origin}*\n\n📍*Drop* - *${destination}*\n\nLet's go! 🚗💨`;
+
+  return message;
+};
+
 const findTitleInSections = (input: {id: string, title: string},
   sections: {title: string, rows: {id: string, title: string}[]}[]) => {
   for (const section of sections) {
@@ -94,14 +112,39 @@ const convertUserTime = (timeString: string) => {
   return {todayNowIndia, userDateNowIndia};
 };
 
-const setExpiredRequests = async () => {
-  const todayNow = DateTime.now().setZone(TIMEZONE).toJSDate();
+const sendReminder = async (time: DateTime) => {
+  const reminders: RequestStore[] = [];
+  const currentTime = Timestamp.fromDate(time.toJSDate());
+  const currentTimeWithOffset = Timestamp.fromDate(time.plus({minutes: 10}).toJSDate());
+
+  await admin.firestore().collection("request")
+    .where("expired", "==", false)
+    .where("timeindia", ">", currentTime)
+    .where("timeindia", "<=", currentTimeWithOffset)
+    .orderBy("timeindia", "asc")
+    .get().then((querySnapshot) => {
+      querySnapshot.forEach((doc) => reminders.push({id: doc.id, data: doc.data()} as RequestStore));
+    });
+
+  const groupedReminders = Object.entries(_.groupBy(reminders, "data.time"));
+  const sendReminders = _.head(_.orderBy(groupedReminders, ([key]) => convertUserTime(key).userDateNowIndia));
+
+  if (sendReminders) {
+    sendReminders[1].forEach(async (reminder) => {
+      await normalMessage(reminder.data.for,
+        `Reminder: Your *${reminder.data.type == "pick" ? "pickup": "drop" }* ` +
+        `route at *${reminder.data.time}* is about to start. \n` +
+        "Send your live location to help us track you");
+    });
+  }
+};
+
+const setExpiredRequests = async (todayNow: DateTime) => {
   const batch = admin.firestore().batch();
   await admin.firestore().collection("request")
     .where("expired", "==", false)
-    .where("timeindia", "<", Timestamp.fromDate(todayNow)).get()
-    .then((snapshot) => snapshot.forEach((doc) => batch.update(doc.ref, {
-      pending: false,
+    .where("timeindia", "<", Timestamp.fromDate(todayNow.toJSDate()))
+    .get().then((snapshot) => snapshot.forEach((doc) => batch.update(doc.ref, {
       expired: true,
       updatedAt: FieldValue.serverTimestamp(),
     })));
@@ -130,6 +173,34 @@ const sendChoice = async (
         body: {text: bodyText},
         action: {
           buttons: buttons,
+        },
+      },
+    },
+  });
+};
+
+const sendCTAUrl = async (
+  messageFrom: string,
+  headerText: string,
+  messageText: string,
+  displayText: string,
+  mapsUrl: string) => {
+  await axios({
+    method: "POST",
+    url: MESSAGES_URL,
+    headers: {Authorization: `Bearer ${GRAPH_API_TOKEN}`},
+    data: {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: messageFrom,
+      type: "interactive",
+      interactive: {
+        type: "cta_url",
+        header: {type: "text", text: headerText},
+        body: {text: messageText},
+        action: {
+          name: "cta_url",
+          parameters: {display_text: displayText, url: mapsUrl},
         },
       },
     },
@@ -192,7 +263,6 @@ const populateRequest = async (messageFrom: string) => {
   const requests: RequestStore[] = [];
   await admin.firestore().collection("request")
     .where("for", "==", messageFrom)
-    .where("pending", "==", true)
     .where("expired", "==", false)
     .get().then((querySnapshot) => {
       querySnapshot.forEach((doc) => {
@@ -211,11 +281,14 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
   });
 
   let mapsUrl = "";
+  let routeMessage = "";
 
   if (requestType === "pick") {
+    routeMessage = createRouteMessage(locations, ROUTE_PICK, time);
     mapsUrl += createMapsUrl(locations, ROUTE_PICK);
   }
   if (requestType === "drop") {
+    routeMessage = createRouteMessage(locations, ROUTE_PICK, time);
     mapsUrl += createMapsUrl(locations, ROUTE_DROP);
   }
 
@@ -225,7 +298,6 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
     for: user,
     time: time,
     timeindia: userDateNowIndia.toJSDate(),
-    pending: true,
     expired: false,
     updatedAt: FieldValue.serverTimestamp(),
   };
@@ -238,7 +310,9 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
   } else {
     await admin.firestore().collection("request").add({...payload, createdAt: FieldValue.serverTimestamp()});
   }
+
+  return {routeMessage, mapsUrl};
 };
 
-export {isTimeValid, createMapsUrl, findTitleInSections, convertUserTime,
-  sendChoice, normalMessage, sendPickDropList, populateRequest, putRequest, setExpiredRequests};
+export {isTimeValid, createMapsUrl, findTitleInSections, convertUserTime, sendChoice, sendReminder,
+  normalMessage, sendPickDropList, populateRequest, putRequest, setExpiredRequests, sendCTAUrl};

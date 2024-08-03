@@ -7,8 +7,8 @@ interface RequestStore {
         type: PickDropRequest;
         routemap: string;
         time: string;
+        for: string;
         timeindia: DateTime;
-        pending: boolean;
         expired: boolean;
         createdAt: Timestamp;
         updatedAt: Timestamp;

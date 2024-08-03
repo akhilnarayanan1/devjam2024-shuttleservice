@@ -10,16 +10,17 @@
 import * as logger from "firebase-functions/logger";
 import {onRequest} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
-import * as express from "express";
-import axios from "axios";
-import type {Request, Response} from "express";
 import {initializeApp} from "firebase-admin/app";
-import type {PickDropRequest, RequestStore} from "./types";
-import {findTitleInSections, sendChoice, normalMessage, sendPickDropList,
-  populateRequest, putRequest, setExpiredRequests} from "./functions";
+import type {Request, Response} from "express";
+import * as express from "express";
 import * as _ from "lodash";
+import axios from "axios";
+import type {PickDropRequest, RequestStore} from "./types";
+import {findTitleInSections, sendChoice, sendPickDropList, populateRequest,
+  putRequest, setExpiredRequests, sendCTAUrl, convertUserTime, sendReminder} from "./functions";
 import {ALL_SECTIONS, PICK_REPLY, DROP_REPLY, EDIT_PICK_REPLY,
   EDIT_DROP_REPLY, MESSAGES_URL, TIMEZONE} from "./constants";
+import {DateTime} from "luxon";
 
 const {GRAPH_API_TOKEN, WEBHOOK_VERIFY_TOKEN} = process.env;
 
@@ -59,15 +60,18 @@ initializeApp();
 //   res.sendStatus(200);
 // });
 
-app.get("/test", async (req: Request, res: Response) => {
-  // await putRequest("pick", "918109062610", "09:50 AM");
-  // let requests: RequestStore[] = [];
-  // requests = await populateRequest("917987089820");
+app.get("/fake-trigger/:time", async (req: Request, res: Response) => {
+  const time = req.params.time as string;
 
+  const {userDateNowIndia} = convertUserTime(time);
+
+  console.log("Fake trigger", userDateNowIndia);
+
+  await setExpiredRequests(userDateNowIndia);
+  await sendReminder(userDateNowIndia);
 
   res.sendStatus(200);
 });
-
 
 app.post("/webhook", async (req: Request, res: Response) => {
   // check if the webhook request contains a message
@@ -97,8 +101,8 @@ app.post("/webhook", async (req: Request, res: Response) => {
 
     // UPDATE DB
     // if (isTimeValid(time)) {
-    await putRequest(pickOrDrop, messageFrom, time);
-    await normalMessage(messageFrom, "Scheduled for " + pickOrDrop + " at " + time + ".");
+    const {routeMessage, mapsUrl} = await putRequest(pickOrDrop, messageFrom, time);
+    await sendCTAUrl(messageFrom, "🚀 Route plan 🚀", routeMessage, "Open Map", mapsUrl);
     // } else {
     //   await normalMessage(messageFrom, "Invalid time requested");
     // }
@@ -138,14 +142,14 @@ app.post("/webhook", async (req: Request, res: Response) => {
       const editHeader = "Edit/New Route Type";
 
       if (hasPickType && hasDropType) {
-        const editBody = `You already both pickup (${filteredPick[0].data.time}) 
-          & drop (${filteredDrop[0].data.time}) route. Edit it?`;
+        const editBody = `You already both pickup at (${filteredPick[0].data.time}) 
+          & drop at (${filteredDrop[0].data.time}). Edit it?`;
         await sendChoice(messageFrom, editHeader, editBody, buttonsEditPickDropType);
       } else if (hasPickType) {
-        const editBody = `You already have a pickup (${filteredPick[0].data.time}) route. Edit it?`;
+        const editBody = `You already have a pickup at (${filteredPick[0].data.time}). Edit it?`;
         await sendChoice(messageFrom, editHeader, editBody, buttonsEditPickType);
       } else {
-        const editBody = `You already have a drop(${filteredDrop[0].data.time}) route. Edit it?`;
+        const editBody = `You already have a drop at(${filteredDrop[0].data.time}). Edit it?`;
         await sendChoice(messageFrom, editHeader, editBody, buttonsEditDropType);
       }
     } else {
@@ -192,8 +196,11 @@ app.get("/webhook", (req: Request, res: Response) => {
 exports.api = onRequest(app);
 
 exports.api_schedule = onSchedule(
-  {schedule: "5,10,25,40,45 8,9,10,11,4,5,6,7 * * *", timeZone: TIMEZONE},
+  {schedule: "5,10,25,40,45 8-11,16-19 * * *", timeZone: TIMEZONE},
   async (event) => {
     logger.log("Scheduled function triggered", event);
-    await setExpiredRequests();
-});
+
+    const todayNowJS = DateTime.now().setZone(TIMEZONE);
+    await setExpiredRequests(todayNowJS);
+    await sendReminder(todayNowJS);
+  });
