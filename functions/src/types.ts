@@ -27,7 +27,15 @@ interface LocationStore {
     place: Location;
 }
 
+interface GetRequestsAll {
+    todayStart: DateTime;
+    todayEnd: DateTime;
+}
+
+interface GetRequestsUser extends GetRequestsAll {
+    messageFor: string;
+}
+
 type PickDropRequest = "pick" | "drop";
 
-
-export {RequestStore, LocationStore, Location, PickDropRequest};
+export {RequestStore, LocationStore, Location, PickDropRequest, GetRequestsUser, GetRequestsAll};

@@ -1,5 +1,5 @@
 import {DateTime} from "luxon";
-import type {LocationStore, PickDropRequest, RequestStore, Location} from "./types";
+import type {LocationStore, PickDropRequest, RequestStore, Location, GetRequestsUser, GetRequestsAll} from "./types";
 import axios from "axios";
 import * as admin from "firebase-admin";
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
@@ -60,7 +60,7 @@ const createRouteMessage = (locations: LocationStore[], route: string[], time: s
   "*Real-time updates:* Everyone can track the LEADER's trip progress.\n\n" +
   "*Smooth pickup:* Share your location when you're close to the pickup point.\n\n" +
   "_How to Share Live-Location?🤔_\n\n" +
-  "*Will send a reminder again few minutes before the trip* (if no live location is shared).\n\n" +
+  "*Will send a reminder again few minutes before the trip.*\n\n" +
   `📍*Pickup* - *${origin}*\n\n📍*Drop* - *${destination}*\n\nLet's go! 🚗💨`;
 
   return message;
@@ -112,36 +112,50 @@ const convertUserTime = (timeString: string) => {
   return {todayNowIndia, userDateNowIndia};
 };
 
-const sendReminder = async (time: DateTime) => {
-  const reminders: RequestStore[] = [];
-  const currentTime = Timestamp.fromDate(time.toJSDate());
-  const currentTimeWithOffset = Timestamp.fromDate(time.plus({minutes: 10}).toJSDate());
+const getUserRequest = async (args: GetRequestsUser) => {
+  const requests: RequestStore[] = [];
+  const {todayStart, todayEnd, messageFor} = args;
+  console.log(args);
 
-  await admin.firestore().collection("request")
+  const todayStartTimestamp = Timestamp.fromDate(todayStart.toJSDate());
+  const todayEndTimestamp = Timestamp.fromDate(todayEnd.toJSDate());
+
+  await admin.firestore().collection("requests")
     .where("expired", "==", false)
-    .where("timeindia", ">", currentTime)
-    .where("timeindia", "<=", currentTimeWithOffset)
+    .where("timeindia", ">=", todayStartTimestamp)
+    .where("timeindia", "<", todayEndTimestamp)
+    .where("for", "==", messageFor)
     .orderBy("timeindia", "asc")
     .get().then((querySnapshot) => {
-      querySnapshot.forEach((doc) => reminders.push({id: doc.id, data: doc.data()} as RequestStore));
+      querySnapshot.forEach((doc) => requests.push({id: doc.id, data: doc.data()} as RequestStore));
     });
 
-  const groupedReminders = Object.entries(_.groupBy(reminders, "data.time"));
-  const sendReminders = _.head(_.orderBy(groupedReminders, ([key]) => convertUserTime(key).userDateNowIndia));
+  return requests;
+};
 
-  if (sendReminders) {
-    sendReminders[1].forEach(async (reminder) => {
-      await normalMessage(reminder.data.for,
-        `Reminder: Your *${reminder.data.type == "pick" ? "pickup": "drop" }* ` +
-        `route at *${reminder.data.time}* is about to start. \n` +
-        "Send your live location to help us track you");
+const getAllRequests = async (args: GetRequestsAll) => {
+  const requests: RequestStore[] = [];
+  const {todayStart, todayEnd} = args;
+  console.log(args);
+
+  const todayStartTimestamp = Timestamp.fromDate(todayStart.toJSDate());
+  const todayEndTimestamp = Timestamp.fromDate(todayEnd.toJSDate());
+
+  await admin.firestore().collection("requests")
+    .where("expired", "==", false)
+    .where("timeindia", ">=", todayStartTimestamp)
+    .where("timeindia", "<", todayEndTimestamp)
+    .orderBy("timeindia", "asc")
+    .get().then((querySnapshot) => {
+      querySnapshot.forEach((doc) => requests.push({id: doc.id, data: doc.data()} as RequestStore));
     });
-  }
+
+  return requests;
 };
 
 const setExpiredRequests = async (todayNow: DateTime) => {
   const batch = admin.firestore().batch();
-  await admin.firestore().collection("request")
+  await admin.firestore().collection("requests")
     .where("expired", "==", false)
     .where("timeindia", "<", Timestamp.fromDate(todayNow.toJSDate()))
     .get().then((snapshot) => snapshot.forEach((doc) => batch.update(doc.ref, {
@@ -149,6 +163,23 @@ const setExpiredRequests = async (todayNow: DateTime) => {
       updatedAt: FieldValue.serverTimestamp(),
     })));
   batch.commit();
+};
+
+const getMapsUrl = (text: string) => {
+  // Regular expression to capture the URL
+  const urlRegex = /(https?:\/\/maps\.app\.goo\.gl\/.*)/;
+
+  // Extract the URL
+  const match = urlRegex.exec(text);
+  let gotMatch = false;
+  let url = "";
+  console.log(match);
+
+  if (match) {
+    url = match[1]; // Capture group 1 contains the URL
+    gotMatch = true;
+  }
+  return {gotMatch, url};
 };
 
 
@@ -258,24 +289,44 @@ const sendPickDropList = async (messageFrom: string, routeType: PickDropRequest)
   });
 };
 
+const sendReminder = async (time: DateTime) => {
+  const reminders: RequestStore[] = [];
+  const currentTime = Timestamp.fromDate(time.toJSDate());
+  const currentTimeWithOffset = Timestamp.fromDate(time.plus({minutes: 10}).toJSDate());
 
-const populateRequest = async (messageFrom: string) => {
-  const requests: RequestStore[] = [];
-  await admin.firestore().collection("request")
-    .where("for", "==", messageFrom)
+  await admin.firestore().collection("requests")
     .where("expired", "==", false)
+    .where("timeindia", ">", currentTime)
+    .where("timeindia", "<=", currentTimeWithOffset)
+    .orderBy("timeindia", "asc")
     .get().then((querySnapshot) => {
-      querySnapshot.forEach((doc) => {
-        requests.push({id: doc.id, data: doc.data()} as RequestStore);
-      });
+      querySnapshot.forEach((doc) => reminders.push({id: doc.id, data: doc.data()} as RequestStore));
     });
-  return requests;
+
+  const groupedReminders = Object.entries(_.groupBy(reminders, "data.time"));
+  const sendReminders = _.head(_.orderBy(groupedReminders, ([key]) => convertUserTime(key).userDateNowIndia));
+
+  const totalReminders = sendReminders ? sendReminders[1].length : 0;
+
+  if (sendReminders) {
+    sendReminders[1].forEach(async (reminder) => {
+      await normalMessage(reminder.data.for,
+        `Reminder: Your *${reminder.data.type == "pick" ? "pickup": "drop" }* ` +
+        `route at *${reminder.data.time}* is about to start. \n` +
+        `Total number of people onboarding: ${totalReminders}`);
+    });
+  }
 };
 
 
 const putRequest = async (requestType: PickDropRequest, user: string, time: string) => {
   const locations: LocationStore[] = [];
   const {userDateNowIndia} = convertUserTime(time);
+
+  const todayNowJS = DateTime.now().setZone(TIMEZONE);
+  const todayStart = todayNowJS.set({hour: 0, minute: 0, second: 0, millisecond: 0});
+  const todayEnd = todayNowJS.plus({days: 1}).set({hour: 0, minute: 0, second: 0, millisecond: 0});
+
   await admin.firestore().collection("locations").get().then((querySnapshot) => {
     querySnapshot.forEach((doc) => locations.push({id: doc.id, place: doc.data() as Location}));
   });
@@ -288,7 +339,7 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
     mapsUrl += createMapsUrl(locations, ROUTE_PICK);
   }
   if (requestType === "drop") {
-    routeMessage = createRouteMessage(locations, ROUTE_PICK, time);
+    routeMessage = createRouteMessage(locations, ROUTE_DROP, time);
     mapsUrl += createMapsUrl(locations, ROUTE_DROP);
   }
 
@@ -302,17 +353,17 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
     updatedAt: FieldValue.serverTimestamp(),
   };
 
-  const request = await populateRequest(user);
+  const request = await getUserRequest({todayStart, todayEnd, messageFor: user});
   console.log(payload, request, requestType, _.some(request, ["data.type", requestType]));
   if (_.some(request, ["data.type", requestType]) ) {
     const docid = _.filter(request, ["data.type", requestType])[0].id;
-    await admin.firestore().collection("request").doc(docid).update(payload);
+    await admin.firestore().collection("requests").doc(docid).update(payload);
   } else {
-    await admin.firestore().collection("request").add({...payload, createdAt: FieldValue.serverTimestamp()});
+    await admin.firestore().collection("requests").add({...payload, createdAt: FieldValue.serverTimestamp()});
   }
 
   return {routeMessage, mapsUrl};
 };
 
-export {isTimeValid, createMapsUrl, findTitleInSections, convertUserTime, sendChoice, sendReminder,
-  normalMessage, sendPickDropList, populateRequest, putRequest, setExpiredRequests, sendCTAUrl};
+export {isTimeValid, createMapsUrl, findTitleInSections, convertUserTime, sendChoice, getMapsUrl, getAllRequests,
+  normalMessage, sendPickDropList, putRequest, setExpiredRequests, sendCTAUrl, getUserRequest, sendReminder};

@@ -12,55 +12,62 @@ import {onRequest} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
 import {initializeApp} from "firebase-admin/app";
 import type {Request, Response} from "express";
-import * as express from "express";
+import * as admin from "firebase-admin";
 import * as _ from "lodash";
 import axios from "axios";
-import type {PickDropRequest, RequestStore} from "./types";
-import {findTitleInSections, sendChoice, sendPickDropList, populateRequest,
-  putRequest, setExpiredRequests, sendCTAUrl, convertUserTime, sendReminder} from "./functions";
+import type {PickDropRequest} from "./types";
+import {findTitleInSections, sendChoice, sendPickDropList, putRequest, getAllRequests, getMapsUrl,
+  sendReminder, setExpiredRequests, sendCTAUrl, getUserRequest, normalMessage, convertUserTime} from "./functions";
 import {ALL_SECTIONS, PICK_REPLY, DROP_REPLY, EDIT_PICK_REPLY,
-  EDIT_DROP_REPLY, MESSAGES_URL, TIMEZONE} from "./constants";
+  EDIT_DROP_REPLY, MESSAGES_URL, TIMEZONE, app} from "./constants";
 import {DateTime} from "luxon";
 
 const {GRAPH_API_TOKEN, WEBHOOK_VERIFY_TOKEN} = process.env;
 
-const app = express();
-app.use(express.json());
 initializeApp();
 
-// app.get("/populate", async (req: Request, res: Response) => {
-//   await admin.firestore().collection("locations").add({
-//     shortname: "Seetharam Palaya Metro",
-//     placename: "Seetharam Palya Metro Station",
-//     placeid: "ChIJsUHA1f8RrjsRsk2ztqTF2kQ",
-//     routekey: "metro",
-//   });
+app.get("/fake-trigger/populate", async (req: Request, res: Response) => {
+  await admin.firestore().collection("locations").add({
+    shortname: "Seetharam Palaya Metro",
+    placename: "Seetharam Palya Metro Station",
+    placeid: "ChIJsUHA1f8RrjsRsk2ztqTF2kQ",
+    routekey: "metro",
+  });
 
-//   await admin.firestore().collection("locations").add({
-//     shortname: "Schenider - Argon North",
-//     placename: "Bagmane Argon",
-//     placeid: "ChIJ02GMFAATrjsRjGa_utASi_w",
-//     routekey: "argon",
-//   });
+  await admin.firestore().collection("locations").add({
+    shortname: "Schenider - Argon North",
+    placename: "Bagmane Argon",
+    placeid: "ChIJ02GMFAATrjsRjGa_utASi_w",
+    routekey: "argon",
+  });
 
-//   await admin.firestore().collection("locations").add({
-//     shortname: "Bagmane Xenon",
-//     placename: "Bagmane Xenon",
-//     placeid: "ChIJI_q8OnsTrjsRfgm5xIdKTt4",
-//     routekey: "xenon",
-//   });
+  await admin.firestore().collection("locations").add({
+    shortname: "Bagmane Xenon",
+    placename: "Bagmane Xenon",
+    placeid: "ChIJI_q8OnsTrjsRfgm5xIdKTt4",
+    routekey: "xenon",
+  });
 
-//   await admin.firestore().collection("locations").add({
-//     shortname: "Bagmane Neon",
-//     placename: "Bagmane Neon",
-//     placeid: "ChIJq8nbVlsTrjsR80URA0Zth5M",
-//     routekey: "neon",
-//   });
+  await admin.firestore().collection("locations").add({
+    shortname: "Bagmane Neon",
+    placename: "Bagmane Neon",
+    placeid: "ChIJq8nbVlsTrjsR80URA0Zth5M",
+    routekey: "neon",
+  });
 
-//   res.sendStatus(200);
-// });
+  res.sendStatus(200);
+});
 
-app.get("/fake-trigger/:time", async (req: Request, res: Response) => {
+app.get("/fake-trigger/put-request", async (req: Request, res: Response) => {
+  await putRequest("pick", "91aaaaaaaaaa", "09:30 AM");
+  await putRequest("pick", "91bbbbbbbbbb", "09:30 AM");
+  await putRequest("drop", "91aaaaaaaaaa", "04:30 PM");
+
+  res.sendStatus(200);
+});
+
+
+app.get("/fake-trigger/scheduler/:time", async (req: Request, res: Response) => {
   const time = req.params.time as string;
 
   const {userDateNowIndia} = convertUserTime(time);
@@ -69,6 +76,45 @@ app.get("/fake-trigger/:time", async (req: Request, res: Response) => {
 
   await setExpiredRequests(userDateNowIndia);
   await sendReminder(userDateNowIndia);
+
+  res.sendStatus(200);
+});
+
+app.get("/fake-trigger/send-url/:messageFor/:time", async (req: Request, res: Response) => {
+  const messageFor = req.params.messageFor as string;
+  const time = req.params.time as string;
+
+  console.log("Fake trigger URL", messageFor, time);
+
+  const {userDateNowIndia: todayNowJS} = convertUserTime(time);
+
+  const todayStart = todayNowJS.set({hour: 0, minute: 0, second: 0, millisecond: 0});
+  const todayEnd = todayNowJS.plus({days: 1}).set({hour: 0, minute: 0, second: 0, millisecond: 0});
+
+  const allUserRequests = await getUserRequest({todayStart, todayEnd, messageFor});
+
+  const messageBody = "I'm on my way. See my trip progress and arrival time " +
+      "on Maps: https://maps.app.goo.gl/7FMyKW9SWJ7JiWEkq";
+
+  const {gotMatch, url} = getMapsUrl(messageBody);
+
+  if (gotMatch) {
+    const allRequests = await getAllRequests({todayStart, todayEnd});
+    const onlySend = _.filter(allRequests, ["data.time", _.head(allUserRequests)?.data.time]);
+    const totalOnlySend = onlySend.length;
+
+    onlySend.forEach(async (request) => {
+      let urlMessage = `Shared the location, view live ${url} here. \n\n` +
+        `Total number of people onboarding: ${totalOnlySend}`;
+
+      if (request.data.for === messageFor) {
+        urlMessage = "Thanks for sharing the location. \n" +
+          `Live location has been sent to: ${totalOnlySend-1} person(s)`;
+      }
+
+      await normalMessage(request.data.for, urlMessage);
+    });
+  }
 
   res.sendStatus(200);
 });
@@ -130,14 +176,35 @@ app.post("/webhook", async (req: Request, res: Response) => {
       {type: "reply", reply: DROP_REPLY},
     ];
 
-    let requests: RequestStore[] = [];
-    requests = await populateRequest(messageFrom);
+    const todayNowJS = DateTime.now().setZone(TIMEZONE);
+    const todayStart = todayNowJS.set({hour: 0, minute: 0, second: 0, millisecond: 0});
+    const todayEnd = todayNowJS.plus({days: 1}).set({hour: 0, minute: 0, second: 0, millisecond: 0});
 
-    if (requests.length > 0) {
-      const hasPickType = _.some(requests, ["data.type", "pick"]);
-      const hasDropType = _.some(requests, ["data.type", "drop"]);
-      const filteredPick = _.filter(requests, ["data.type", "pick"]);
-      const filteredDrop = _.filter(requests, ["data.type", "drop"]);
+    const allUserRequests = await getUserRequest({todayStart, todayEnd, messageFor: messageFrom});
+
+    const {gotMatch, url} = getMapsUrl(message.text.body);
+
+    if (gotMatch) {
+      const allRequests = await getAllRequests({todayStart, todayEnd});
+      const onlySend = _.filter(allRequests, ["data.time", _.head(allUserRequests)?.data.time]);
+      const totalOnlySend = onlySend.length;
+
+      onlySend.forEach(async (request) => {
+        let urlMessage = `Shared the location, view live ${url} here. \n\n` +
+        `Total number of people onboarding: ${totalOnlySend}`;
+
+        if (request.data.for === messageFrom) {
+          urlMessage = "Thanks for sharing the location. \n" +
+          `Live location has been sent to: ${totalOnlySend-1} person(s)`;
+        }
+
+        await normalMessage(request.data.for, urlMessage);
+      });
+    } else if (allUserRequests.length > 0) {
+      const hasPickType = _.some(allUserRequests, ["data.type", "pick"]);
+      const hasDropType = _.some(allUserRequests, ["data.type", "drop"]);
+      const filteredPick = _.filter(allUserRequests, ["data.type", "pick"]);
+      const filteredDrop = _.filter(allUserRequests, ["data.type", "drop"]);
 
       const editHeader = "Edit/New Route Type";
 
