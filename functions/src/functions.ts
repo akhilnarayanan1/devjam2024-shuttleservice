@@ -115,7 +115,6 @@ const convertUserTime = (timeString: string) => {
 const getUserRequest = async (args: GetRequestsUser) => {
   const requests: RequestStore[] = [];
   const {todayStart, todayEnd, messageFor} = args;
-  console.log(args);
 
   const todayStartTimestamp = Timestamp.fromDate(todayStart.toJSDate());
   const todayEndTimestamp = Timestamp.fromDate(todayEnd.toJSDate());
@@ -136,7 +135,6 @@ const getUserRequest = async (args: GetRequestsUser) => {
 const getAllRequests = async (args: GetRequestsAll) => {
   const requests: RequestStore[] = [];
   const {todayStart, todayEnd} = args;
-  console.log(args);
 
   const todayStartTimestamp = Timestamp.fromDate(todayStart.toJSDate());
   const todayEndTimestamp = Timestamp.fromDate(todayEnd.toJSDate());
@@ -173,7 +171,6 @@ const getMapsUrl = (text: string) => {
   const match = urlRegex.exec(text);
   let gotMatch = false;
   let url = "";
-  console.log(match);
 
   if (match) {
     url = match[1]; // Capture group 1 contains the URL
@@ -354,7 +351,6 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
   };
 
   const request = await getUserRequest({todayStart, todayEnd, messageFor: user});
-  console.log(payload, request, requestType, _.some(request, ["data.type", requestType]));
   if (_.some(request, ["data.type", requestType]) ) {
     const docid = _.filter(request, ["data.type", requestType])[0].id;
     await admin.firestore().collection("requests").doc(docid).update(payload);
