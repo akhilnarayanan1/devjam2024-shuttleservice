@@ -1,11 +1,12 @@
 import {DateTime} from "luxon";
-import type {LocationStore, PickDropRequest, RequestStore, Location, GetRequestsUser, GetRequestsAll} from "./types";
+import type {LocationStore, Request, PickDropRequest, RequestStore, Location,
+  GetRequestsUser, GetRequestsAll, WALocation} from "./types";
 import axios from "axios";
 import * as admin from "firebase-admin";
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import * as _ from "lodash";
-import {MESSAGES_URL, PICK_SECTION, DROP_SECTION, ROUTE_PICK, ROUTE_DROP, TIMEZONE} from "./constants";
-
+import {MESSAGES_URL, PICK_SECTION, DROP_SECTION, ROUTE_PICK, ROUTE_DROP, TIMEZONE,
+  PICK_REPLY, DROP_REPLY, EDIT_PICK_REPLY, EDIT_DROP_REPLY} from "./constants";
 const {GRAPH_API_TOKEN} = process.env;
 
 const isTimeValid = (timeString: string) => {
@@ -110,6 +111,148 @@ const convertUserTime = (timeString: string) => {
   });
 
   return {todayNowIndia, userDateNowIndia};
+};
+
+const sendMessageWithUrl = async (onlySend: RequestStore[], messageFrom: string, url: string) => {
+  console.log("Only send", onlySend);
+  const totalOnlySend = onlySend.length;
+
+  onlySend.forEach(async (request) => {
+    let urlMessage = `Shared the location, view live ${url} here. \n\n` +
+      `Total number of people onboarding: ${totalOnlySend}`;
+
+    if (request.data.for === messageFrom) {
+      urlMessage = "Thanks for sharing the location. \n" +
+        `Live location has been sent to: ${totalOnlySend-1} person(s)`;
+    }
+    await normalMessage(request.data.for, urlMessage);
+  });
+};
+
+const calculateTodayNowJS = (time?: string) => {
+  let userDateNowIndia; // Declare userDateNowIndia here
+  if (time) {
+    ({userDateNowIndia} = convertUserTime(time));
+    return userDateNowIndia;
+  } else {
+    return DateTime.now().setZone(TIMEZONE);
+  }
+};
+
+const getLocation = async (routekey: string) => {
+  const locations = await admin.firestore().collection("locations").where("routekey", "==", routekey).get();
+  return locations.docs[0].data()?.coordinates;
+};
+
+const processTextMessage = async (messageBody: string, messageFor: string, time?: string) => {
+  const todayNowJS = calculateTodayNowJS(time);
+  const todayStart = todayNowJS.set({hour: 0, minute: 0, second: 0, millisecond: 0});
+  const todayEnd = todayNowJS.plus({days: 1}).set({hour: 0, minute: 0, second: 0, millisecond: 0});
+
+  const allUserRequests = await getUserRequest({todayStart, todayEnd, messageFor});
+  const allRequests = await getAllRequests({todayStart, todayEnd});
+  const onlyLatestForUser = _.head(_.filter(allUserRequests, (request: RequestStore) => {
+    return (todayNowJS <= DateTime.fromJSDate(request.data.timeindia.toDate()));
+  }));
+
+  const {gotMatch, url} = getMapsUrl(messageBody);
+
+  if (gotMatch) {
+    if (!onlyLatestForUser) {
+      await normalMessage(messageFor, "No request found for you, either its expired or not created");
+      return;
+    }
+
+    const onlySend = _.filter(allRequests, ["data.time", onlyLatestForUser.data.time]);
+
+    await sendMessageWithUrl(onlySend, messageFor, url);
+    return;
+  }
+
+  if (allUserRequests.length > 0) {
+    const buttonsEditPickType = [
+      {type: "reply", reply: EDIT_PICK_REPLY},
+      {type: "reply", reply: DROP_REPLY},
+    ];
+
+    const buttonsEditDropType = [
+      {type: "reply", reply: PICK_REPLY},
+      {type: "reply", reply: EDIT_DROP_REPLY},
+    ];
+
+    const buttonsEditPickDropType = [
+      {type: "reply", reply: EDIT_PICK_REPLY},
+      {type: "reply", reply: EDIT_DROP_REPLY},
+    ];
+
+    const hasPickType = _.some(allUserRequests, ["data.type", "pick"]);
+    const hasDropType = _.some(allUserRequests, ["data.type", "drop"]);
+    const filteredPick = _.filter(allUserRequests, ["data.type", "pick"]);
+    const filteredDrop = _.filter(allUserRequests, ["data.type", "drop"]);
+
+    const editHeader = "Edit/New Route Type";
+
+    if (hasPickType && hasDropType) {
+      const editBody = `You already both pickup at (${filteredPick[0].data.time}) 
+        & drop at (${filteredDrop[0].data.time}). Edit it?`;
+      await sendChoice(messageFor, editHeader, editBody, buttonsEditPickDropType);
+    } else if (hasPickType) {
+      const editBody = `You already have a pickup at (${filteredPick[0].data.time}). Edit it?`;
+      await sendChoice(messageFor, editHeader, editBody, buttonsEditPickType);
+    } else {
+      const editBody = `You already have a drop at(${filteredDrop[0].data.time}). Edit it?`;
+      await sendChoice(messageFor, editHeader, editBody, buttonsEditDropType);
+    }
+    return;
+  }
+
+  const buttonsPickDropType = [
+    {type: "reply", reply: PICK_REPLY},
+    {type: "reply", reply: DROP_REPLY},
+  ];
+
+  const editBody = "Please select the route type";
+  await sendChoice(messageFor, "Pick Route Type", editBody, buttonsPickDropType);
+};
+
+const acceptLocation = async (messageFor: string, currentWALocation: WALocation, time?: string) => {
+  const todayNowJS = calculateTodayNowJS(time);
+  const todayStart = todayNowJS.set({hour: 0, minute: 0, second: 0, millisecond: 0});
+  const todayEnd = todayNowJS.plus({days: 1}).set({hour: 0, minute: 0, second: 0, millisecond: 0});
+
+  const allUserRequests = await getUserRequest({todayStart, todayEnd, messageFor});
+  const onlyLatestForUser = _.head(_.filter(allUserRequests, (request: RequestStore) => {
+    return (todayNowJS <= DateTime.fromJSDate(request.data.timeindia.toDate()));
+  }));
+
+  if (currentWALocation?.name || currentWALocation?.address) {
+    await normalMessage(messageFor, "I need live location, not address or name");
+    return;
+  }
+
+  if (!onlyLatestForUser) {
+    await normalMessage(messageFor, "No request found for you, either its expired or not created");
+    return;
+  }
+
+  const pickOrDrop = onlyLatestForUser?.data.type as PickDropRequest;
+  let locationDetails = {} as {latitude: number, longitude: number};
+
+  if (pickOrDrop === "pick") {
+    locationDetails = await getLocation("metro");
+  }
+
+  if (pickOrDrop === "drop") {
+    locationDetails = await getLocation("argon");
+  }
+
+  const totalDistance = Math.abs(getDistanceFromLatLonInKm(locationDetails, currentWALocation));
+  console.log("Total distance", totalDistance);
+
+  if (totalDistance > 1) {
+    await normalMessage(messageFor, "You are far from the pickup point, come closer");
+    return;
+  }
 };
 
 const getUserRequest = async (args: GetRequestsUser) => {
@@ -249,7 +392,6 @@ const normalMessage = async (messageFrom: string, messageBody: string) => {
   });
 };
 
-
 const sendPickDropList = async (messageFrom: string, routeType: PickDropRequest) => {
   let messageText = "";
   let actionButtonText = "";
@@ -282,6 +424,43 @@ const sendPickDropList = async (messageFrom: string, routeType: PickDropRequest)
           button: actionButtonText,
         },
       },
+    },
+  });
+};
+
+const sendLocationRequest = async (messageFor: string, messageBody: string) => {
+  await axios({
+    method: "POST",
+    url: MESSAGES_URL,
+    headers: {Authorization: `Bearer ${GRAPH_API_TOKEN}`},
+    data: {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      type: "interactive",
+      to: messageFor,
+      interactive: {
+        type: "location_request_message",
+        body: {
+          "text": messageBody,
+        },
+        action: {
+          "name": "send_location",
+        },
+      },
+    },
+  });
+};
+
+const markRead = async (messageId: string) => {
+  // mark incoming message as read
+  await axios({
+    method: "POST",
+    url: MESSAGES_URL,
+    headers: {Authorization: `Bearer ${GRAPH_API_TOKEN}`},
+    data: {
+      messaging_product: "whatsapp",
+      status: "read",
+      message_id: messageId,
     },
   });
 };
@@ -340,20 +519,21 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
     mapsUrl += createMapsUrl(locations, ROUTE_DROP);
   }
 
-  const payload = {
+  const payload: Request = {
     type: requestType,
     routemap: mapsUrl,
     for: user,
     time: time,
-    timeindia: userDateNowIndia.toJSDate(),
+    createdAt: FieldValue.serverTimestamp() as Timestamp,
+    timeindia: Timestamp.fromDate(userDateNowIndia.toJSDate()) as Timestamp,
     expired: false,
-    updatedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp() as Timestamp,
   };
 
   const request = await getUserRequest({todayStart, todayEnd, messageFor: user});
   if (_.some(request, ["data.type", requestType]) ) {
     const docid = _.filter(request, ["data.type", requestType])[0].id;
-    await admin.firestore().collection("requests").doc(docid).update(payload);
+    await admin.firestore().collection("requests").doc(docid).update({...payload});
   } else {
     await admin.firestore().collection("requests").add({...payload, createdAt: FieldValue.serverTimestamp()});
   }
@@ -361,5 +541,25 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
   return {routeMessage, mapsUrl};
 };
 
+const getDistanceFromLatLonInKm = (
+  from: {latitude: number, longitude: number},
+  to: {latitude: number, longitude: number}
+) => {
+  const R = 6371; // Radius of the earth in km
+  const dLat = deg2rad(to.latitude-from.latitude); // deg2rad below
+  const dLon = deg2rad(to.longitude-from.longitude);
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(deg2rad(from.latitude)) * Math.cos(deg2rad(to.latitude)) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const d = R * c; // Distance in km
+  return d;
+};
+
+const deg2rad = (deg: number) => {
+  return deg * (Math.PI/180);
+};
+
 export {isTimeValid, createMapsUrl, findTitleInSections, convertUserTime, sendChoice, getMapsUrl, getAllRequests,
-  normalMessage, sendPickDropList, putRequest, setExpiredRequests, sendCTAUrl, getUserRequest, sendReminder};
+  normalMessage, sendPickDropList, putRequest, setExpiredRequests, sendCTAUrl, getUserRequest, sendReminder, markRead,
+  getDistanceFromLatLonInKm, sendLocationRequest, getLocation, processTextMessage, calculateTodayNowJS, acceptLocation};
