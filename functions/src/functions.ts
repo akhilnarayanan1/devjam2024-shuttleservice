@@ -6,18 +6,18 @@ import * as admin from "firebase-admin";
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import * as _ from "lodash";
 import {MESSAGES_URL, PICK_SECTION, DROP_SECTION, ROUTE_PICK, ROUTE_DROP, TIMEZONE,
-  PICK_REPLY, DROP_REPLY, EDIT_PICK_REPLY, EDIT_DROP_REPLY} from "./constants";
+  BUTTON_EDIT_PICK, BUTTON_EDIT_DROP, BUTTON_EDIT_PICK_DROP, BUTTON_PICK_DROP} from "./constants";
 const {GRAPH_API_TOKEN} = process.env;
 
-const isTimeValid = (timeString: string) => {
-  const {todayNowIndia, userDateNowIndia} = convertUserTime(timeString);
+// const isTimeValid = (timeString: string) => {
+//   const {todayNowIndia, userDateNowIndia} = convertUserTime(timeString);
 
-  // Calculate the difference in milliseconds
-  const diff = todayNowIndia.toMillis() - userDateNowIndia.toMillis();
-  const diffInSeconds = diff / 1000;
+//   // Calculate the difference in milliseconds
+//   const diff = todayNowIndia.toMillis() - userDateNowIndia.toMillis();
+//   const diffInSeconds = diff / 1000;
 
-  return diffInSeconds < 0 ? true: false;
-};
+//   return diffInSeconds < 0 ? true: false;
+// };
 
 const createMapsUrl = (locations: LocationStore[], route: string[]) => {
   const originVal = locations.find((location) => location.place?.routekey === route.at(0)) as LocationStore;
@@ -68,14 +68,14 @@ const createRouteMessage = (locations: LocationStore[], route: string[], time: s
 };
 
 const findTitleInSections = (input: {id: string, title: string},
-  sections: {title: string, rows: {id: string, title: string}[]}[]) => {
+  sections: {title: string, rows: {id: string, title: string}[]}[]): PickDropRequest | undefined => {
   for (const section of sections) {
     const foundRow = section.rows.find((row) => row.id === input.id && row.title === input.title);
     if (foundRow) {
-      return section.title;
+      return section.title as PickDropRequest;
     }
   }
-  return null; // Not found
+  return undefined;
 };
 
 
@@ -170,21 +170,6 @@ const processTextMessage = async (messageBody: string, messageFor: string, time?
   }
 
   if (allUserRequests.length > 0) {
-    const buttonsEditPickType = [
-      {type: "reply", reply: EDIT_PICK_REPLY},
-      {type: "reply", reply: DROP_REPLY},
-    ];
-
-    const buttonsEditDropType = [
-      {type: "reply", reply: PICK_REPLY},
-      {type: "reply", reply: EDIT_DROP_REPLY},
-    ];
-
-    const buttonsEditPickDropType = [
-      {type: "reply", reply: EDIT_PICK_REPLY},
-      {type: "reply", reply: EDIT_DROP_REPLY},
-    ];
-
     const hasPickType = _.some(allUserRequests, ["data.type", "pick"]);
     const hasDropType = _.some(allUserRequests, ["data.type", "drop"]);
     const filteredPick = _.filter(allUserRequests, ["data.type", "pick"]);
@@ -195,24 +180,19 @@ const processTextMessage = async (messageBody: string, messageFor: string, time?
     if (hasPickType && hasDropType) {
       const editBody = `You already both pickup at (${filteredPick[0].data.time}) 
         & drop at (${filteredDrop[0].data.time}). Edit it?`;
-      await sendChoice(messageFor, editHeader, editBody, buttonsEditPickDropType);
+      await sendChoice(messageFor, editHeader, editBody, BUTTON_EDIT_PICK_DROP);
     } else if (hasPickType) {
       const editBody = `You already have a pickup at (${filteredPick[0].data.time}). Edit it?`;
-      await sendChoice(messageFor, editHeader, editBody, buttonsEditPickType);
+      await sendChoice(messageFor, editHeader, editBody, BUTTON_EDIT_PICK);
     } else {
       const editBody = `You already have a drop at(${filteredDrop[0].data.time}). Edit it?`;
-      await sendChoice(messageFor, editHeader, editBody, buttonsEditDropType);
+      await sendChoice(messageFor, editHeader, editBody, BUTTON_EDIT_DROP);
     }
     return;
   }
 
-  const buttonsPickDropType = [
-    {type: "reply", reply: PICK_REPLY},
-    {type: "reply", reply: DROP_REPLY},
-  ];
-
   const editBody = "Please select the route type";
-  await sendChoice(messageFor, "Pick Route Type", editBody, buttonsPickDropType);
+  await sendChoice(messageFor, "Pick Route Type", editBody, BUTTON_PICK_DROP);
 };
 
 const acceptLocation = async (messageFor: string, currentWALocation: WALocation, time?: string) => {
@@ -428,28 +408,28 @@ const sendPickDropList = async (messageFrom: string, routeType: PickDropRequest)
   });
 };
 
-const sendLocationRequest = async (messageFor: string, messageBody: string) => {
-  await axios({
-    method: "POST",
-    url: MESSAGES_URL,
-    headers: {Authorization: `Bearer ${GRAPH_API_TOKEN}`},
-    data: {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      type: "interactive",
-      to: messageFor,
-      interactive: {
-        type: "location_request_message",
-        body: {
-          "text": messageBody,
-        },
-        action: {
-          "name": "send_location",
-        },
-      },
-    },
-  });
-};
+// const sendLocationRequest = async (messageFor: string, messageBody: string) => {
+//   await axios({
+//     method: "POST",
+//     url: MESSAGES_URL,
+//     headers: {Authorization: `Bearer ${GRAPH_API_TOKEN}`},
+//     data: {
+//       messaging_product: "whatsapp",
+//       recipient_type: "individual",
+//       type: "interactive",
+//       to: messageFor,
+//       interactive: {
+//         type: "location_request_message",
+//         body: {
+//           "text": messageBody,
+//         },
+//         action: {
+//           "name": "send_location",
+//         },
+//       },
+//     },
+//   });
+// };
 
 const markRead = async (messageId: string) => {
   // mark incoming message as read
@@ -495,7 +475,7 @@ const sendReminder = async (time: DateTime) => {
 };
 
 
-const putRequest = async (requestType: PickDropRequest, user: string, time: string) => {
+const putRequest = async (requestType: PickDropRequest | undefined, user: string, time: string) => {
   const locations: LocationStore[] = [];
   const {userDateNowIndia} = convertUserTime(time);
 
@@ -509,6 +489,11 @@ const putRequest = async (requestType: PickDropRequest, user: string, time: stri
 
   let mapsUrl = "";
   let routeMessage = "";
+
+  if (requestType === undefined) {
+    await normalMessage(user, "Invalid route type");
+    return {routeMessage, mapsUrl};
+  }
 
   if (requestType === "pick") {
     routeMessage = createRouteMessage(locations, ROUTE_PICK, time);
@@ -560,6 +545,5 @@ const deg2rad = (deg: number) => {
   return deg * (Math.PI/180);
 };
 
-export {isTimeValid, createMapsUrl, findTitleInSections, convertUserTime, sendChoice, getMapsUrl, getAllRequests,
-  normalMessage, sendPickDropList, putRequest, setExpiredRequests, sendCTAUrl, getUserRequest, sendReminder, markRead,
-  getDistanceFromLatLonInKm, sendLocationRequest, getLocation, processTextMessage, calculateTodayNowJS, acceptLocation};
+export {findTitleInSections, sendPickDropList, putRequest, sendReminder, setExpiredRequests,
+  sendCTAUrl, convertUserTime, processTextMessage, acceptLocation, markRead, calculateTodayNowJS};

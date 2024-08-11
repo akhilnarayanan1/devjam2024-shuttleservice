@@ -1,5 +1,3 @@
-import * as express from "express";
-
 const {GRAPH_API_VERSION, BUSINESS_WA_NO} = process.env;
 
 const MESSAGES_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}/${BUSINESS_WA_NO}/messages`;
@@ -47,8 +45,27 @@ const DROP_SECTION = {
 
 const ALL_SECTIONS = [PICK_SECTION, DROP_SECTION];
 
-const app = express();
-app.use(express.json());
 
-export {ALL_SECTIONS, PICK_REPLY, DROP_REPLY, EDIT_PICK_REPLY, EDIT_DROP_REPLY, MESSAGES_URL,
-  PICK_SECTION, DROP_SECTION, ROUTE_PICK, ROUTE_DROP, DEMO_ROUTE_HOME, DEMO_ROUTE_OFFICE, TIMEZONE, app};
+const BUTTON_EDIT_PICK = [
+  {type: "reply", reply: EDIT_PICK_REPLY},
+  {type: "reply", reply: DROP_REPLY},
+];
+
+const BUTTON_EDIT_DROP = [
+  {type: "reply", reply: PICK_REPLY},
+  {type: "reply", reply: EDIT_DROP_REPLY},
+];
+
+const BUTTON_EDIT_PICK_DROP = [
+  {type: "reply", reply: EDIT_PICK_REPLY},
+  {type: "reply", reply: EDIT_DROP_REPLY},
+];
+
+const BUTTON_PICK_DROP = [
+  {type: "reply", reply: PICK_REPLY},
+  {type: "reply", reply: DROP_REPLY},
+];
+
+export {ALL_SECTIONS, MESSAGES_URL, BUTTON_EDIT_PICK, BUTTON_EDIT_DROP, BUTTON_EDIT_PICK_DROP, BUTTON_PICK_DROP,
+  PICK_SECTION, DROP_SECTION, ROUTE_PICK, ROUTE_DROP, DEMO_ROUTE_HOME, DEMO_ROUTE_OFFICE, TIMEZONE,
+  PICK_REPLY, EDIT_PICK_REPLY, DROP_REPLY, EDIT_DROP_REPLY};
