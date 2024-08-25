@@ -6,7 +6,7 @@ import type {Request, Response} from "express";
 import * as express from "express";
 import {populateLocations, populateRequest, fakeScheduler, fakeSendUrl, validateLocation} from "./fake-triggers";
 import {findTitleInSections, sendPickDropList, putRequest, sendReminder, setExpiredRequests,
-  sendCTAUrl, processTextMessage, acceptLocation, markRead, calculateTodayNowJS} from "./functions";
+  sendCTAUrl, processTextMessage, markRead, calculateTodayNowJS} from "./functions";
 import {ALL_SECTIONS, TIMEZONE, PICK_REPLY, EDIT_PICK_REPLY, DROP_REPLY, EDIT_DROP_REPLY} from "./constants";
 
 const {WEBHOOK_VERIFY_TOKEN} = process.env;
@@ -33,11 +33,11 @@ app.post("/webhook", async (req: Request, res: Response) => {
   }
 
   // check if the incoming message contains location
-  if (message?.type === "location") {
-    const currentWALocation = message.location;
-    await acceptLocation(messageFrom, currentWALocation);
-    await markRead(message.id);
-  }
+  // if (message?.type === "location") {
+  //   const currentWALocation = message.location;
+  //   await acceptLocation(messageFrom, currentWALocation);
+  //   await markRead(message.id);
+  // }
 
 
   // check if the incoming message interactive reply

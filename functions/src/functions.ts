@@ -9,15 +9,15 @@ import {MESSAGES_URL, PICK_SECTION, DROP_SECTION, ROUTE_PICK, ROUTE_DROP, TIMEZO
   BUTTON_EDIT_PICK, BUTTON_EDIT_DROP, BUTTON_EDIT_PICK_DROP, BUTTON_PICK_DROP} from "./constants";
 const {GRAPH_API_TOKEN} = process.env;
 
-// const isTimeValid = (timeString: string) => {
-//   const {todayNowIndia, userDateNowIndia} = convertUserTime(timeString);
+const isTimeValid = (timeString: string) => {
+  const {todayNowIndia, userDateNowIndia} = convertUserTime(timeString);
 
-//   // Calculate the difference in milliseconds
-//   const diff = todayNowIndia.toMillis() - userDateNowIndia.toMillis();
-//   const diffInSeconds = diff / 1000;
+  // Calculate the difference in milliseconds
+  const diff = todayNowIndia.toMillis() - userDateNowIndia.toMillis();
+  const diffInSeconds = diff / 1000;
 
-//   return diffInSeconds < 0 ? true: false;
-// };
+  return diffInSeconds < 0 ? true: false;
+};
 
 const createMapsUrl = (locations: LocationStore[], route: string[]) => {
   const originVal = locations.find((location) => location.place?.routekey === route.at(0)) as LocationStore;
@@ -123,7 +123,8 @@ const sendMessageWithUrl = async (onlySend: RequestStore[], messageFrom: string,
 
     if (request.data.for === messageFrom) {
       urlMessage = "Thanks for sharing the location. \n" +
-        `Live location has been sent to: ${totalOnlySend-1} person(s)`;
+        "Live location has been sent to all the members. \n" +
+        `Total number of people onboarding: ${totalOnlySend}`;
     }
     await normalMessage(request.data.for, urlMessage);
   });
@@ -408,28 +409,28 @@ const sendPickDropList = async (messageFrom: string, routeType: PickDropRequest)
   });
 };
 
-// const sendLocationRequest = async (messageFor: string, messageBody: string) => {
-//   await axios({
-//     method: "POST",
-//     url: MESSAGES_URL,
-//     headers: {Authorization: `Bearer ${GRAPH_API_TOKEN}`},
-//     data: {
-//       messaging_product: "whatsapp",
-//       recipient_type: "individual",
-//       type: "interactive",
-//       to: messageFor,
-//       interactive: {
-//         type: "location_request_message",
-//         body: {
-//           "text": messageBody,
-//         },
-//         action: {
-//           "name": "send_location",
-//         },
-//       },
-//     },
-//   });
-// };
+const sendLocationRequest = async (messageFor: string, messageBody: string) => {
+  await axios({
+    method: "POST",
+    url: MESSAGES_URL,
+    headers: {Authorization: `Bearer ${GRAPH_API_TOKEN}`},
+    data: {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      type: "interactive",
+      to: messageFor,
+      interactive: {
+        type: "location_request_message",
+        body: {
+          "text": messageBody,
+        },
+        action: {
+          "name": "send_location",
+        },
+      },
+    },
+  });
+};
 
 const markRead = async (messageId: string) => {
   // mark incoming message as read
@@ -546,4 +547,5 @@ const deg2rad = (deg: number) => {
 };
 
 export {findTitleInSections, sendPickDropList, putRequest, sendReminder, setExpiredRequests,
-  sendCTAUrl, convertUserTime, processTextMessage, acceptLocation, markRead, calculateTodayNowJS};
+  sendCTAUrl, convertUserTime, processTextMessage, acceptLocation, markRead, calculateTodayNowJS,
+  normalMessage, isTimeValid, sendLocationRequest};
